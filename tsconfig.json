@@ -5,8 +5,16 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true
   },
-  "include": ["types", "plugins/*/src", "template/src"]
+  "include": [
+    "types",
+    "plugins/*/src",
+    "template/src"
+  ]
 }
