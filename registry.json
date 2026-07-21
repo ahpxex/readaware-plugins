@@ -37,11 +37,12 @@
     {
       "id": "word-bank",
       "name": "Word Bank",
-      "version": "0.2.0",
-      "description": "A personal vocabulary notebook: save words from selections or chat, review them as flashcards, look up definitions with the built-in dictionary.",
+      "version": "0.3.0",
+      "description": "Save words into the app vocabulary notebook, review them as flashcards, with native dictionary entries.",
       "author": "ReadAware",
       "minAppVersion": "0.2.0",
       "permissions": [
+        "reading-data",
         "dictionary",
         "ai"
       ]
