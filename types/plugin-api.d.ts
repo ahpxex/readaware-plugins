@@ -17,7 +17,7 @@
  */
 
 /** Permission domains a manifest may declare (docs/plugin-system.md §4). */
-// (kept type-only in this mirror; the app owns the runtime constant)
+// (kept type-only in this mirror)
 
 export type PluginPermission = "reading-data" | "library-write" | "network" | "ai" | "dictionary" | "llm" | "clipboard";
 
@@ -107,6 +107,8 @@ export type PluginBlocksView = {
 
 export type PluginBlock =
   | { kind: "markdown"; markdown: string }
+  /** A section header: quiet eyebrow caption over an optional line of text. */
+  | { kind: "heading"; text: string; caption?: string }
   /** A dictionary entry, rendered with the app's own dictionary UX. */
   | { kind: "dictionary"; entry: PluginDictionaryEntry }
   /** Label/value rows (provenance, metadata) in a quiet definition list. */
