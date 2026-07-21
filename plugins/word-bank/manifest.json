@@ -1,0 +1,10 @@
+{
+  "id": "word-bank",
+  "name": "Word Bank",
+  "version": "0.1.0",
+  "minAppVersion": "0.2.0",
+  "description": "A personal vocabulary notebook: save words from selections or chat, review them as flashcards, look up definitions.",
+  "author": "ReadAware",
+  "permissions": ["network", "ai"],
+  "main": "main.js"
+}
