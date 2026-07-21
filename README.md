@@ -9,19 +9,29 @@ repository** and lands via pull request.
 
 ## Submitting a plugin
 
+**TypeScript is the recommended authoring path** — copy `template/`, write
+`src/main.ts` against the typed API in `types/plugin-api.d.ts`, and build
+with `bun run build` (or `bun build src/main.ts --outfile main.js --format
+esm`). What ships is always the built `main.js`; plain JavaScript is equally
+accepted if you prefer it.
+
 1. Fork this repository.
-2. Add your plugin folder under `plugins/<your-plugin-id>/` containing at
-   least:
+2. Copy `template/` to `plugins/<your-plugin-id>/` (or create the folder by
+   hand) containing at least:
    - `manifest.json` — see the format below
-   - `main.js` — a single self-contained ES module (bundle it yourself if
-     you build from multiple files)
+   - `main.js` — a single self-contained ES module (the build output when
+     authoring in TypeScript; keep `src/` committed so the code is reviewable)
 3. Add a matching entry to `registry.json` (keep the array sorted by id).
-4. Run `node scripts/validate.mjs` locally — CI runs the same check on your PR.
+4. Run `node scripts/validate.mjs` and `npx tsc --noEmit` locally — CI runs
+   the same checks on your PR.
 5. Open a pull request describing what the plugin does and which permissions
    it needs and why.
 
 Updates are the same flow: bump `version` in both `manifest.json` and
 `registry.json` in one PR.
+
+The three official plugins are authored in TypeScript (`plugins/*/src/`)
+with their built `main.js` committed — use them as living examples.
 
 ## manifest.json
 

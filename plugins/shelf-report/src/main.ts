@@ -1,11 +1,20 @@
-// plugins/shelf-report/src/main.ts
-function progressLabel(fraction) {
-  if (typeof fraction !== "number" || Number.isNaN(fraction))
-    return "not started";
+/**
+ * Shelf Report — an official example plugin (TypeScript source; `main.js` is
+ * the built output).
+ *
+ * Demonstrates: a shelf header action registered as a full Page, the list
+ * view with drill-down into a markdown detail, and the `reading-data`
+ * permission (read-only books + annotations).
+ */
+import type { PluginContext, PluginModule } from "../../../types/plugin-api";
+
+function progressLabel(fraction: number | undefined): string {
+  if (typeof fraction !== "number" || Number.isNaN(fraction)) return "not started";
   return `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
 }
-var plugin = {
-  activate(ctx) {
+
+const plugin: PluginModule = {
+  activate(ctx: PluginContext) {
     ctx.ui.registerHeaderAction({
       id: "report",
       title: "Shelf report",
@@ -13,7 +22,7 @@ var plugin = {
       surface: "shelf",
       presentation: "page",
       view: async () => {
-        const books = await ctx.reading.listBooks();
+        const books = await ctx.reading!.listBooks();
         return {
           kind: "list",
           emptyText: "No books on the shelf yet.",
@@ -23,7 +32,7 @@ var plugin = {
             subtitle: `${book.author ?? "Unknown author"} · ${progressLabel(book.progressFraction)}`,
             icon: "book-open",
             onSelect: async () => {
-              const annotations = await ctx.reading.listAnnotations({ bookId: book.id });
+              const annotations = await ctx.reading!.listAnnotations({ bookId: book.id });
               const highlights = annotations.filter((a) => a.kind === "highlight").length;
               const notes = annotations.filter((a) => a.kind === "note").length;
               const asks = annotations.filter((a) => a.kind === "ask").length;
@@ -38,19 +47,18 @@ var plugin = {
                     `- Progress: ${progressLabel(book.progressFraction)}`,
                     `- Highlights: ${highlights}`,
                     `- Notes: ${notes}`,
-                    `- Questions asked: ${asks}`
-                  ].filter((line) => line !== null).join(`
-`)
-                }
+                    `- Questions asked: ${asks}`,
+                  ]
+                    .filter((line): line is string => line !== null)
+                    .join("\n"),
+                },
               };
-            }
-          }))
+            },
+          })),
         };
-      }
+      },
     });
-  }
+  },
 };
-var main_default = plugin;
-export {
-  main_default as default
-};
+
+export default plugin;

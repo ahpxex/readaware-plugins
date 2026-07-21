@@ -1,0 +1,13 @@
+{
+  "name": "readaware-plugins",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "for dir in plugins/*/src; do id=$(basename $(dirname $dir)); bun build plugins/$id/src/main.ts --outfile plugins/$id/main.js --format esm; done"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
