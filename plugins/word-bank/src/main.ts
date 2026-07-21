@@ -4,7 +4,8 @@
  *
  * - selection action → prefilled form → namespaced storage
  * - reader header popup: this book's words, drill into async detail views
- *   that fetch definitions over `ctx.fetch` (the `network` permission)
+ *   backed by the app's built-in dictionary (the `dictionary` permission —
+ *   same cache the reader's own look-ups use)
  * - shelf header Page: the full bank with edit/remove via a form view
  * - palette command: a flashcard review session built from chained views
  * - two agent tools (the `ai` permission): the reading agent can save and
@@ -72,29 +73,30 @@ function upsertWord(
   return created;
 }
 
-// ─── Dictionary lookup (network permission) ──────────────────────────────────
+// ─── Dictionary lookup (the app's built-in dictionary) ───────────────────────
 
-/** Best-effort English definition via the free dictionaryapi.dev. */
-async function lookUpDefinition(ctx: PluginContext, word: string): Promise<string | null> {
-  if (!ctx.fetch || !/^[a-zA-Z][a-zA-Z' -]{0,40}$/.test(word)) return null;
+/**
+ * Definition via `ctx.dictionary` — the same engine and cache behind the
+ * reader's own look-ups, in the user's configured explanation language.
+ * Returns null when AI isn't configured or the lookup fails.
+ */
+async function lookUpDefinition(ctx: PluginContext, word: SavedWord): Promise<string | null> {
+  if (!ctx.dictionary) return null;
   try {
-    const response = await ctx.fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
-      { signal: AbortSignal.timeout(6000) },
-    );
-    if (!response.ok) return null;
-    const data = (await response.json()) as {
-      phonetic?: string;
-      meanings?: { partOfSpeech?: string; definitions?: { definition?: string }[] }[];
-    }[];
-    const entry = data[0];
-    if (!entry?.meanings?.length) return null;
-    const lines = entry.meanings.slice(0, 3).map((meaning) => {
-      const definition = meaning.definitions?.[0]?.definition ?? "";
-      return `- *${meaning.partOfSpeech ?? "?"}* — ${definition}`;
+    const { entry } = await ctx.dictionary.lookUp({
+      term: word.word,
+      context: word.context,
+      bookTitle: word.bookTitle,
     });
-    const phonetic = entry.phonetic ? `${entry.phonetic}\n\n` : "";
-    return `${phonetic}${lines.join("\n")}`;
+    const senses = entry.senses
+      .slice(0, 3)
+      .map((sense) => `- *${sense.partOfSpeech}* — ${sense.definition}`);
+    const parts = [
+      entry.pronunciation ? `${entry.pronunciation}` : null,
+      senses.join("\n"),
+      entry.contextualMeaning ? `**In this context:** ${entry.contextualMeaning}` : null,
+    ];
+    return parts.filter((part): part is string => part != null).join("\n\n");
   } catch {
     return null;
   }
@@ -108,7 +110,7 @@ function formatDate(iso: string): string {
 
 /** Detail view: definition (fetched live), context quote, provenance, note. */
 async function wordDetailView(ctx: PluginContext, word: SavedWord): Promise<PluginView> {
-  const definition = await lookUpDefinition(ctx, word.word);
+  const definition = await lookUpDefinition(ctx, word);
   const parts = [
     `## ${word.word}`,
     definition ?? "_No dictionary entry found._",

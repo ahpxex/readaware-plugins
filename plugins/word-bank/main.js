@@ -29,25 +29,24 @@ function upsertWord(ctx, input) {
   return created;
 }
 async function lookUpDefinition(ctx, word) {
-  if (!ctx.fetch || !/^[a-zA-Z][a-zA-Z' -]{0,40}$/.test(word))
+  if (!ctx.dictionary)
     return null;
   try {
-    const response = await ctx.fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`, { signal: AbortSignal.timeout(6000) });
-    if (!response.ok)
-      return null;
-    const data = await response.json();
-    const entry = data[0];
-    if (!entry?.meanings?.length)
-      return null;
-    const lines = entry.meanings.slice(0, 3).map((meaning) => {
-      const definition = meaning.definitions?.[0]?.definition ?? "";
-      return `- *${meaning.partOfSpeech ?? "?"}* — ${definition}`;
+    const { entry } = await ctx.dictionary.lookUp({
+      term: word.word,
+      context: word.context,
+      bookTitle: word.bookTitle
     });
-    const phonetic = entry.phonetic ? `${entry.phonetic}
+    const senses = entry.senses.slice(0, 3).map((sense) => `- *${sense.partOfSpeech}* — ${sense.definition}`);
+    const parts = [
+      entry.pronunciation ? `${entry.pronunciation}` : null,
+      senses.join(`
+`),
+      entry.contextualMeaning ? `**In this context:** ${entry.contextualMeaning}` : null
+    ];
+    return parts.filter((part) => part != null).join(`
 
-` : "";
-    return `${phonetic}${lines.join(`
-`)}`;
+`);
   } catch {
     return null;
   }
@@ -56,7 +55,7 @@ function formatDate(iso) {
   return iso.slice(0, 10);
 }
 async function wordDetailView(ctx, word) {
-  const definition = await lookUpDefinition(ctx, word.word);
+  const definition = await lookUpDefinition(ctx, word);
   const parts = [
     `## ${word.word}`,
     definition ?? "_No dictionary entry found._",
