@@ -1,0 +1,109 @@
+# ReadAware Plugins
+
+The community plugin registry for [ReadAware](https://readaware.app) — an
+AI-native reading app. Plugins listed here appear in the app under
+**Settings → Plugins → Marketplace** and install with one click.
+
+Submissions work like Raycast's extension repo: **your plugin lives in this
+repository** and lands via pull request.
+
+## Submitting a plugin
+
+1. Fork this repository.
+2. Add your plugin folder under `plugins/<your-plugin-id>/` containing at
+   least:
+   - `manifest.json` — see the format below
+   - `main.js` — a single self-contained ES module (bundle it yourself if
+     you build from multiple files)
+3. Add a matching entry to `registry.json` (keep the array sorted by id).
+4. Run `node scripts/validate.mjs` locally — CI runs the same check on your PR.
+5. Open a pull request describing what the plugin does and which permissions
+   it needs and why.
+
+Updates are the same flow: bump `version` in both `manifest.json` and
+`registry.json` in one PR.
+
+## manifest.json
+
+```json
+{
+  "id": "my-plugin",
+  "name": "My Plugin",
+  "version": "0.1.0",
+  "minAppVersion": "0.2.0",
+  "description": "One sentence about what it does.",
+  "author": "you",
+  "permissions": ["network"],
+  "main": "main.js"
+}
+```
+
+- `id` — lowercase letters, digits, hyphens (max 64 chars); must equal the
+  folder name.
+- `permissions` — only what you use, from: `reading-data` (read books,
+  highlights, notes), `network` (`ctx.fetch`), `ai` (register agent tools),
+  `clipboard` (write). Users see these before installing.
+- `main` — the entry module, default `main.js`.
+
+## Plugin API in one screen
+
+`main.js` default-exports a lifecycle object. Everything goes through the
+`ctx` handed to `activate`; every `register*` returns a disposable the app
+cleans up on disable.
+
+```js
+export default {
+  activate(ctx) {
+    // Reader selection menu — runs silently (toast) or opens a dialog view
+    ctx.ui.registerSelectionAction({
+      id: "my-action",
+      title: "Do something with the selection",
+      icon: "sparkle",
+      run: (input) => ({ toast: `Got: ${input.text.slice(0, 20)}…` }),
+    });
+
+    // Header buttons — reader: anchored popup; shelf: popup or a full page
+    ctx.ui.registerHeaderAction({
+      id: "my-page",
+      title: "My page",
+      icon: "chart-line-up",
+      surface: "shelf",
+      presentation: "page",
+      view: async () => ({ kind: "list", items: [] }),
+    });
+
+    // Command palette
+    ctx.ui.registerCommand({ id: "hello", title: "My Plugin: hello", run: () => {} });
+
+    // Agent tools (requires the "ai" permission) — the reading agent can
+    // call these during chat, namespaced plugin_<id>_<name>
+    ctx.ai?.registerTool({
+      name: "my_tool",
+      description: "What the model should know about this tool.",
+      parameters: { type: "object", properties: {} },
+      execute: async () => ({ ok: true }),
+    });
+  },
+};
+```
+
+UI is declarative only — three view kinds (`markdown`, `list`, `form`),
+rendered by the app's design system. A list item or form submit may return
+`{ view }` to chain deeper, `{ toast }` for a notice, or `{ close: true }`.
+Icons are picked by name from the app's curated Phosphor set. Persistent
+state goes through `ctx.storage` (namespaced key-value).
+
+The full contract lives in the app repository:
+`apps/web/src/features/plugins/lib/plugin-types.ts`.
+
+## Review expectations
+
+- Declare the minimum permissions; PRs asking for more than the code uses
+  will be sent back.
+- `main.js` must be readable (or accompanied by a link to the source it was
+  bundled from).
+- No obfuscated code, no analytics/tracking, no remote code loading.
+
+Plugins run inside the app with the same access as the app itself —
+installation is a trust decision users make per plugin, and this repo's
+review is the community's first line of defense.
