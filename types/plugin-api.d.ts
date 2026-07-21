@@ -19,7 +19,7 @@
 /** Permission domains a manifest may declare (docs/plugin-system.md §4). */
 // (kept type-only in this mirror; the app owns the runtime constant)
 
-export type PluginPermission = "reading-data" | "network" | "ai" | "dictionary" | "llm" | "clipboard";
+export type PluginPermission = "reading-data" | "library-write" | "network" | "ai" | "dictionary" | "llm" | "clipboard";
 
 export type PluginManifest = {
   /** Directory name and namespace: lowercase, digits, hyphens. */
@@ -33,6 +33,12 @@ export type PluginManifest = {
   permissions?: PluginPermission[];
   /** Entry module relative to the plugin folder. Defaults to "main.js". */
   main?: string;
+  /**
+   * Declarative settings: rendered by the app from the Plugins panel; values
+   * persist as one object under the plugin's storage key `settings`
+   * (read with `ctx.storage.get("settings")`).
+   */
+  settings?: PluginFormField[];
 };
 
 /** Returned by every `register*` call; disposing removes the contribution. */
@@ -66,6 +72,8 @@ export type PluginListView = {
 
 export type PluginFormField =
   | { kind: "text"; id: string; label: string; value?: string; placeholder?: string }
+  | { kind: "textarea"; id: string; label: string; value?: string; placeholder?: string; rows?: number }
+  | { kind: "number"; id: string; label: string; value?: number; min?: number; max?: number; step?: number }
   | {
       kind: "select";
       id: string;
@@ -75,7 +83,7 @@ export type PluginFormField =
     }
   | { kind: "toggle"; id: string; label: string; value?: boolean };
 
-export type PluginFormValues = Record<string, string | boolean>;
+export type PluginFormValues = Record<string, string | boolean | number>;
 
 export type PluginFormView = {
   kind: "form";
@@ -131,13 +139,20 @@ export type PluginView =
  * - `undefined` / `null` — nothing happens (surface stays as is);
  * - `{ toast }` — a transient notice;
  * - `{ view }` — open (or push onto) the surface with this view;
- * - `{ close: true }` — dismiss the surface (composable with `toast`).
+ * - `{ close: true }` — dismiss the surface (composable with `toast`);
+ * - `{ fieldErrors }` (from a form submit) — stay on the form and show the
+ *   errors under their fields.
  */
 export type PluginViewResult =
   | void
   | undefined
   | null
-  | { toast?: string; view?: PluginView; close?: boolean };
+  | {
+      toast?: string;
+      view?: PluginView;
+      close?: boolean;
+      fieldErrors?: Record<string, string>;
+    };
 
 // ─── Contributions ───────────────────────────────────────────────────────────
 
@@ -212,6 +227,24 @@ export type PluginToolDefinition = {
   execute: (params: Record<string, unknown>) => unknown | Promise<unknown>;
 };
 
+// ─── Events ──────────────────────────────────────────────────────────────────
+
+/**
+ * What a plugin can observe. Reading-data-bearing events (`annotation-*`)
+ * require the `reading-data` permission; the rest are ambient.
+ */
+export type PluginEventMap = {
+  "book-opened": { book: { id: string; title: string; author?: string } };
+  "book-closed": { bookId: string };
+  "chapter-changed": { bookId: string; chapterHref: string | null };
+  /** Fires on page turns; fraction is 0..1. */
+  "reading-progress": { bookId: string; fraction: number };
+  "annotation-created": { annotation: PluginAnnotation };
+  "annotation-deleted": { id: string };
+};
+
+export type PluginEventName = keyof PluginEventMap;
+
 // ─── Context handed to activate() ────────────────────────────────────────────
 
 export type PluginStorage = {
@@ -256,6 +289,17 @@ export type PluginContext = {
     registerCommand(command: PluginCommand): PluginDisposable;
     showToast(message: string): void;
   };
+  /**
+   * Subscribe to app events; the disposable (also reclaimed on deactivate)
+   * unsubscribes. `annotation-*` events need the `reading-data` permission —
+   * subscribing without it throws at registration.
+   */
+  events: {
+    on<K extends PluginEventName>(
+      event: K,
+      handler: (payload: PluginEventMap[K]) => void,
+    ): PluginDisposable;
+  };
   /** Requires the `ai` permission. */
   ai?: {
     registerTool(tool: PluginToolDefinition): PluginDisposable;
@@ -287,6 +331,15 @@ export type PluginContext = {
       chapterHref?: string | null;
     }): Promise<PluginAnnotation>;
     deleteAnnotation(id: string): Promise<void>;
+    updateNote(id: string, content: string): Promise<void>;
+    recolorHighlight(
+      id: string,
+      color: "yellow" | "green" | "blue" | "pink",
+    ): Promise<void>;
+    /** Chapter list of a book's extracted text (extraction runs on demand). */
+    getToc(bookId: string): Promise<PluginChapterRef[]>;
+    /** Plain text of one chapter by its toc index; null when unavailable. */
+    getChapterText(bookId: string, chapterIndex: number): Promise<string | null>;
     vocabulary: {
       list(filter?: { query?: string; limit?: number }): Promise<PluginVocabularyEntry[]>;
       add(input: {
@@ -317,12 +370,45 @@ export type PluginContext = {
    * Rejects when AI is not configured.
    */
   llm?: {
-    ask(input: { prompt: string; system?: string }): Promise<string>;
+    ask(input: {
+      prompt: string;
+      system?: string;
+      /** Model tier on the user's account; defaults to "fast". */
+      model?: "fast" | "smart";
+    }): Promise<string>;
+  };
+  /**
+   * Requires the `library-write` permission: add real books to the shelf.
+   * This is how content-provider plugins work (an RSS reader builds an EPUB
+   * from fetched articles and imports it) — the reader, annotations, and AI
+   * all treat the result as a first-class book.
+   */
+  library?: {
+    importBook(input: {
+      fileName: string;
+      data: ArrayBuffer | Uint8Array;
+    }): Promise<PluginBookOverview>;
+  };
+  /**
+   * Ambient reader control (user-visible, no data exposure): open a book,
+   * jump to a CFI or chapter href. `goTo` without `bookId` targets the open
+   * book; with one, it opens that book first.
+   */
+  reader: {
+    openBook(bookId: string): void;
+    goTo(target: { bookId?: string; cfi?: string; href?: string }): void;
   };
   /** Requires the `clipboard` permission. */
   clipboard?: {
     writeText(text: string): Promise<void>;
   };
+};
+
+export type PluginChapterRef = {
+  index: number;
+  title?: string;
+  /** Plain-text length, for budgeting reads. */
+  chars: number;
 };
 
 export type PluginDictionaryEntry = {
