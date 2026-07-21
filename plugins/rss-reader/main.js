@@ -40,6 +40,20 @@ async function fetchFeed(ctx, url) {
     content: { title, author: "RSS", language: "en", sections }
   };
 }
+async function ensureBook(ctx, feed) {
+  const book = await ctx.library.addVirtualBook({
+    providerId: PROVIDER_ID,
+    key: feed.url,
+    title: feed.title,
+    author: "RSS"
+  });
+  if (book.id !== feed.bookId) {
+    const healed = { ...feed, bookId: book.id };
+    upsertFeed(ctx, healed);
+    return healed;
+  }
+  return feed;
+}
 async function subscribe(ctx, url) {
   const { title, articles } = await fetchFeed(ctx, url);
   const book = await ctx.library.addVirtualBook({
@@ -80,8 +94,9 @@ function feedDetailView(ctx, feed) {
             label: "Open as book",
             icon: "book-open",
             variant: "solid",
-            run: () => {
-              ctx.reader.openBook(feed.bookId);
+            run: async () => {
+              const healed = await ensureBook(ctx, feed);
+              ctx.reader.openBook(healed.bookId);
               return { close: true };
             }
           },
@@ -114,8 +129,9 @@ function feedDetailView(ctx, feed) {
           id: article.id,
           title: article.title,
           icon: "article",
-          onSelect: () => {
-            ctx.reader.goTo({ bookId: feed.bookId, href: article.id });
+          onSelect: async () => {
+            const healed = await ensureBook(ctx, feed);
+            ctx.reader.goTo({ bookId: healed.bookId, href: article.id });
             return { close: true };
           }
         }))
@@ -227,6 +243,14 @@ var plugin = {
       surface: "shelf",
       presentation: "page",
       view: () => pageView(ctx)
+    });
+    ctx.events.on("book-removed", ({ bookId }) => {
+      const feeds = loadFeeds(ctx);
+      const feed = feeds.find((entry) => entry.bookId === bookId);
+      if (!feed)
+        return;
+      saveFeeds(ctx, feeds.filter((entry) => entry.url !== feed.url));
+      ctx.ui.showToast(`Unsubscribed “${feed.title}”`);
     });
     ctx.ui.registerCommand({
       id: "subscribe",

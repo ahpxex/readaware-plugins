@@ -1,9 +1,9 @@
 {
   "id": "rss-reader",
   "name": "RSS Reader",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "0.2.0",
-  "description": "Subscribe to RSS/Atom feeds and read each one as a book on your shelf — articles become chapters.",
+  "description": "Subscribe to RSS/Atom feeds and read each one as a book on your shelf \u2014 articles become chapters.",
   "author": "ReadAware",
   "permissions": [
     "network",
