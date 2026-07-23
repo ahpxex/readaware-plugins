@@ -5,7 +5,7 @@ var loadFeeds = (ctx) => ctx.storage.get("feeds") ?? [];
 var saveFeeds = (ctx, feeds) => ctx.storage.set("feeds", feeds);
 var upsertFeed = (ctx, feed) => saveFeeds(ctx, [feed, ...loadFeeds(ctx).filter((entry) => entry.url !== feed.url)]);
 async function fetchFeed(ctx, url) {
-  const response = await ctx.fetch(url, { signal: AbortSignal.timeout(15000) });
+  const response = await ctx.network.fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!response.ok)
     throw new Error(`Feed returned ${response.status}`);
   const xml = new DOMParser().parseFromString(await response.text(), "text/xml");
@@ -41,7 +41,7 @@ async function fetchFeed(ctx, url) {
   };
 }
 async function ensureBook(ctx, feed) {
-  const book = await ctx.library.addVirtualBook({
+  const book = await ctx.books.write.addVirtualBook({
     providerId: PROVIDER_ID,
     key: feed.url,
     title: feed.title,
@@ -56,7 +56,7 @@ async function ensureBook(ctx, feed) {
 }
 async function subscribe(ctx, url) {
   const { title, articles } = await fetchFeed(ctx, url);
-  const book = await ctx.library.addVirtualBook({
+  const book = await ctx.books.write.addVirtualBook({
     providerId: PROVIDER_ID,
     key: url,
     title,
@@ -113,7 +113,7 @@ function feedDetailView(ctx, feed) {
             label: "Unsubscribe",
             variant: "danger",
             run: async () => {
-              await ctx.library.removeVirtualBook({ providerId: PROVIDER_ID, key: feed.url });
+              await ctx.books.write.removeVirtualBook({ providerId: PROVIDER_ID, key: feed.url });
               saveFeeds(ctx, loadFeeds(ctx).filter((entry) => entry.url !== feed.url));
               return { toast: `Unsubscribed “${feed.title}”`, view: pageView(ctx) };
             }
@@ -232,7 +232,7 @@ function pageView(ctx) {
 }
 var plugin = {
   activate(ctx) {
-    ctx.library.registerContentProvider({
+    ctx.books.write.registerContentProvider({
       id: PROVIDER_ID,
       load: async (url) => (await fetchFeed(ctx, url)).content
     });
@@ -244,7 +244,7 @@ var plugin = {
       presentation: "page",
       view: () => pageView(ctx)
     });
-    ctx.events.on("book-removed", ({ bookId }) => {
+    ctx.books.on("book.removed", ({ payload: { bookId } }) => {
       const feeds = loadFeeds(ctx);
       const feed = feeds.find((entry) => entry.bookId === bookId);
       if (!feed)

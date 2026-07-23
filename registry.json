@@ -3,60 +3,63 @@
     {
       "id": "annotation-tools",
       "name": "Annotation Tools",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Gives the reading agent tools to count and list your annotations.",
       "author": "ReadAware",
-      "minAppVersion": "0.2.0",
+      "minAppVersion": "0.3.0",
       "permissions": [
-        "ai",
-        "reading-data"
+        "agent:tools",
+        "annotations:read"
       ]
     },
     {
       "id": "md-quote",
       "name": "Markdown Quote",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Copy selected passages as Markdown blockquotes, with a configurable citation line.",
       "author": "ReadAware",
-      "minAppVersion": "0.2.0",
+      "minAppVersion": "0.3.0",
       "permissions": [
-        "clipboard"
+        "service:clipboard"
       ]
     },
     {
       "id": "rss-reader",
       "name": "RSS Reader",
-      "version": "0.3.0",
-      "description": "Subscribe to RSS/Atom feeds and read each one as a book on your shelf \u2014 articles become chapters.",
+      "version": "0.4.0",
+      "description": "Subscribe to RSS/Atom feeds and read each one as a book on your shelf — articles become chapters.",
       "author": "ReadAware",
-      "minAppVersion": "0.2.0",
+      "minAppVersion": "0.3.0",
       "permissions": [
-        "network",
-        "library-write"
+        "service:network",
+        "books:write"
       ]
     },
     {
       "id": "shelf-report",
       "name": "Shelf Report",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "A full-page report over your shelf: progress per book, drill into annotation counts.",
       "author": "ReadAware",
-      "minAppVersion": "0.2.0",
+      "minAppVersion": "0.3.0",
       "permissions": [
-        "reading-data"
+        "books:read",
+        "reading:read",
+        "annotations:read"
       ]
     },
     {
       "id": "word-bank",
       "name": "Word Bank",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Save words into the app vocabulary notebook, review them as flashcards, with native dictionary entries.",
       "author": "ReadAware",
-      "minAppVersion": "0.2.0",
+      "minAppVersion": "0.3.0",
       "permissions": [
-        "reading-data",
-        "dictionary",
-        "ai"
+        "vocabulary:read",
+        "vocabulary:write",
+        "service:dictionary",
+        "agent:tools"
       ]
     }
   ]

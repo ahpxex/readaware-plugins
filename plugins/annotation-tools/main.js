@@ -1,7 +1,7 @@
 // plugins/annotation-tools/src/main.ts
 var plugin = {
   activate(ctx) {
-    ctx.ai.registerTool({
+    ctx.agent.registerTool({
       name: "count_annotations",
       label: "Count annotations",
       description: "Count the user's annotations (highlights, notes, asked questions), optionally scoped to one book by id.",
@@ -17,7 +17,7 @@ var plugin = {
       },
       execute: async (params) => {
         const bookId = typeof params.bookId === "string" ? params.bookId : undefined;
-        const annotations = await ctx.reading.listAnnotations(bookId ? { bookId } : undefined);
+        const annotations = await ctx.annotations.list(bookId ? { bookId } : undefined);
         return {
           total: annotations.length,
           highlights: annotations.filter((a) => a.kind === "highlight").length,
@@ -26,7 +26,7 @@ var plugin = {
         };
       }
     });
-    ctx.ai.registerTool({
+    ctx.agent.registerTool({
       name: "list_recent_annotations",
       label: "Recent annotations",
       description: "List the user's most recent annotations with their text, newest first.",
@@ -42,12 +42,12 @@ var plugin = {
       },
       execute: async (params) => {
         const limit = typeof params.limit === "number" && params.limit > 0 ? Math.min(50, Math.floor(params.limit)) : 10;
-        const annotations = await ctx.reading.listAnnotations();
+        const annotations = await ctx.annotations.list();
         return annotations.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map((a) => ({
           bookId: a.bookId,
           kind: a.kind,
-          text: a.text,
-          note: a.content,
+          text: a.kind === "note" ? a.quotedText ?? "" : a.text,
+          note: a.kind === "note" ? a.body : undefined,
           createdAt: a.createdAt
         }));
       }

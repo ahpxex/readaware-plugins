@@ -2,7 +2,7 @@
  * Word Bank — the flagship example plugin.
  *
  * v0.3: words live in the app's OWN vocabulary notebook
- * (`ctx.reading.vocabulary` — the same store the reader's dictionary saves
+ * (`ctx.vocabulary` — the same store the reader's dictionary saves
  * into, visible in the app's Context page too). Detail pages are block
  * views: the entry renders with the app's native dictionary UX, provenance
  * as key-value rows, edit/remove as action buttons. Only per-word notes stay
@@ -19,7 +19,7 @@ import type {
 const noteKey = (w: PluginVocabularyEntry) => `note:${w.language}:${w.term.toLowerCase()}`;
 
 async function bankView(ctx: PluginContext, bookTitle?: string): Promise<PluginView> {
-  const words = (await ctx.reading!.vocabulary.list()).filter(
+  const words = (await ctx.vocabulary!.list()).filter(
     (w) => !bookTitle || w.bookTitle === bookTitle,
   );
   return {
@@ -85,7 +85,7 @@ async function wordDetailView(
             icon: "check",
             variant: "danger",
             run: async () => {
-              await ctx.reading!.vocabulary.remove(w.term, w.language);
+              await ctx.vocabulary!.write!.remove(w.term, w.language);
               ctx.storage.remove(noteKey(w));
               return { toast: `Removed “${w.term}”`, view: await bankView(ctx) };
             },
@@ -169,7 +169,7 @@ const plugin: PluginModule = {
               context: input.text.trim().slice(0, 300),
               bookTitle: input.book.title,
             });
-            await ctx.reading!.vocabulary.add({
+            await ctx.vocabulary!.write!.add({
               term,
               language,
               entry,
@@ -207,14 +207,14 @@ const plugin: PluginModule = {
       icon: "graduation-cap",
       keywords: "flashcards vocabulary quiz",
       run: async () => {
-        const words = await ctx.reading!.vocabulary.list();
+        const words = await ctx.vocabulary!.list();
         if (words.length === 0) return { toast: "Your vocabulary is empty" };
         const session = [...words].sort(() => Math.random() - 0.5).slice(0, 5);
         return { view: reviewStep(ctx, session, 0) };
       },
     });
 
-    ctx.ai?.registerTool({
+    ctx.agent?.registerTool({
       name: "save_word",
       label: "Save word",
       description:
@@ -235,12 +235,12 @@ const plugin: PluginModule = {
         const context = typeof params.context === "string" ? params.context : undefined;
         const bookTitle = typeof params.bookTitle === "string" ? params.bookTitle : undefined;
         const { language, entry } = await ctx.dictionary!.lookUp({ term, context, bookTitle });
-        await ctx.reading!.vocabulary.add({ term, language, entry, context, bookTitle });
-        return { saved: term, language, total: (await ctx.reading!.vocabulary.list()).length };
+        await ctx.vocabulary!.write!.add({ term, language, entry, context, bookTitle });
+        return { saved: term, language, total: (await ctx.vocabulary!.list()).length };
       },
     });
 
-    ctx.ai?.registerTool({
+    ctx.agent?.registerTool({
       name: "list_words",
       label: "List words",
       description:
@@ -255,7 +255,7 @@ const plugin: PluginModule = {
           typeof params.limit === "number" && params.limit > 0
             ? Math.min(100, Math.floor(params.limit))
             : 20;
-        return (await ctx.reading!.vocabulary.list({ limit })).map(
+        return (await ctx.vocabulary!.list({ limit })).map(
           ({ term, language, definition, bookTitle, context, addedAt }) => ({
             term,
             language,

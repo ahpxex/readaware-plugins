@@ -1,7 +1,7 @@
 // plugins/word-bank/src/main.ts
 var noteKey = (w) => `note:${w.language}:${w.term.toLowerCase()}`;
 async function bankView(ctx, bookTitle) {
-  const words = (await ctx.reading.vocabulary.list()).filter((w) => !bookTitle || w.bookTitle === bookTitle);
+  const words = (await ctx.vocabulary.list()).filter((w) => !bookTitle || w.bookTitle === bookTitle);
   return {
     kind: "list",
     title: bookTitle ? undefined : `${words.length} word${words.length === 1 ? "" : "s"}`,
@@ -63,7 +63,7 @@ async function wordDetailView(ctx, w) {
             icon: "check",
             variant: "danger",
             run: async () => {
-              await ctx.reading.vocabulary.remove(w.term, w.language);
+              await ctx.vocabulary.write.remove(w.term, w.language);
               ctx.storage.remove(noteKey(w));
               return { toast: `Removed “${w.term}”`, view: await bankView(ctx) };
             }
@@ -137,7 +137,7 @@ var plugin = {
               context: input.text.trim().slice(0, 300),
               bookTitle: input.book.title
             });
-            await ctx.reading.vocabulary.add({
+            await ctx.vocabulary.write.add({
               term,
               language,
               entry,
@@ -173,14 +173,14 @@ var plugin = {
       icon: "graduation-cap",
       keywords: "flashcards vocabulary quiz",
       run: async () => {
-        const words = await ctx.reading.vocabulary.list();
+        const words = await ctx.vocabulary.list();
         if (words.length === 0)
           return { toast: "Your vocabulary is empty" };
         const session = [...words].sort(() => Math.random() - 0.5).slice(0, 5);
         return { view: reviewStep(ctx, session, 0) };
       }
     });
-    ctx.ai?.registerTool({
+    ctx.agent?.registerTool({
       name: "save_word",
       label: "Save word",
       description: "Look up a word with the built-in dictionary and save it to the user's vocabulary notebook. Include the sentence it appeared in when available.",
@@ -201,11 +201,11 @@ var plugin = {
         const context = typeof params.context === "string" ? params.context : undefined;
         const bookTitle = typeof params.bookTitle === "string" ? params.bookTitle : undefined;
         const { language, entry } = await ctx.dictionary.lookUp({ term, context, bookTitle });
-        await ctx.reading.vocabulary.add({ term, language, entry, context, bookTitle });
-        return { saved: term, language, total: (await ctx.reading.vocabulary.list()).length };
+        await ctx.vocabulary.write.add({ term, language, entry, context, bookTitle });
+        return { saved: term, language, total: (await ctx.vocabulary.list()).length };
       }
     });
-    ctx.ai?.registerTool({
+    ctx.agent?.registerTool({
       name: "list_words",
       label: "List words",
       description: "List the user's vocabulary notebook entries, newest first. Useful for quizzes or progress questions.",
@@ -216,7 +216,7 @@ var plugin = {
       },
       execute: async (params) => {
         const limit = typeof params.limit === "number" && params.limit > 0 ? Math.min(100, Math.floor(params.limit)) : 20;
-        return (await ctx.reading.vocabulary.list({ limit })).map(({ term, language, definition, bookTitle, context, addedAt }) => ({
+        return (await ctx.vocabulary.list({ limit })).map(({ term, language, definition, bookTitle, context, addedAt }) => ({
           term,
           language,
           definition,

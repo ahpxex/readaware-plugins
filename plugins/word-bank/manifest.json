@@ -1,14 +1,15 @@
 {
   "id": "word-bank",
   "name": "Word Bank",
-  "version": "0.3.0",
-  "minAppVersion": "0.2.0",
+  "version": "0.4.0",
+  "minAppVersion": "0.3.0",
   "description": "Save words into the app vocabulary notebook, review them as flashcards, with native dictionary entries.",
   "author": "ReadAware",
   "permissions": [
-    "reading-data",
-    "dictionary",
-    "ai"
+    "vocabulary:read",
+    "vocabulary:write",
+    "service:dictionary",
+    "agent:tools"
   ],
   "main": "main.js"
 }

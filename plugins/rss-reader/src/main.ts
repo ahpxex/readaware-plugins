@@ -36,7 +36,7 @@ async function fetchFeed(
   ctx: PluginContext,
   url: string,
 ): Promise<{ title: string; articles: Article[]; content: PluginBookContent }> {
-  const response = await ctx.fetch!(url, { signal: AbortSignal.timeout(15000) });
+  const response = await ctx.network!.fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`Feed returned ${response.status}`);
   const xml = new DOMParser().parseFromString(await response.text(), "text/xml");
   if (xml.querySelector("parsererror")) throw new Error("Not a valid RSS/Atom feed");
@@ -83,7 +83,7 @@ async function fetchFeed(
 
 /** Re-create the virtual book if the user deleted it from the shelf. */
 async function ensureBook(ctx: PluginContext, feed: Feed): Promise<Feed> {
-  const book = await ctx.library!.addVirtualBook({
+  const book = await ctx.books!.write!.addVirtualBook({
     providerId: PROVIDER_ID,
     key: feed.url,
     title: feed.title,
@@ -99,7 +99,7 @@ async function ensureBook(ctx: PluginContext, feed: Feed): Promise<Feed> {
 
 async function subscribe(ctx: PluginContext, url: string): Promise<Feed> {
   const { title, articles } = await fetchFeed(ctx, url);
-  const book = await ctx.library!.addVirtualBook({
+  const book = await ctx.books!.write!.addVirtualBook({
     providerId: PROVIDER_ID,
     key: url,
     title,
@@ -159,7 +159,7 @@ function feedDetailView(ctx: PluginContext, feed: Feed): PluginView {
             label: "Unsubscribe",
             variant: "danger",
             run: async () => {
-              await ctx.library!.removeVirtualBook({ providerId: PROVIDER_ID, key: feed.url });
+              await ctx.books!.write!.removeVirtualBook({ providerId: PROVIDER_ID, key: feed.url });
               saveFeeds(ctx, loadFeeds(ctx).filter((entry) => entry.url !== feed.url));
               return { toast: `Unsubscribed “${feed.title}”`, view: pageView(ctx) };
             },
@@ -287,7 +287,7 @@ function pageView(ctx: PluginContext): PluginView {
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {
-    ctx.library!.registerContentProvider({
+    ctx.books!.write!.registerContentProvider({
       id: PROVIDER_ID,
       load: async (url) => (await fetchFeed(ctx, url)).content,
     });
@@ -300,7 +300,7 @@ const plugin: PluginModule = {
       view: () => pageView(ctx),
     });
     // Deleting the feed-book from the shelf reads as "unsubscribe".
-    ctx.events.on("book-removed", ({ bookId }) => {
+    ctx.books!.on("book.removed", ({ payload: { bookId } }) => {
       const feeds = loadFeeds(ctx);
       const feed = feeds.find((entry) => entry.bookId === bookId);
       if (!feed) return;

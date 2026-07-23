@@ -15,7 +15,23 @@ import { join } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const KNOWN_PERMISSIONS = new Set(["reading-data", "library-write", "network", "ai", "dictionary", "llm", "clipboard"]);
+const KNOWN_PERMISSIONS = new Set([
+  "books:read",
+  "books:write",
+  "collections:read",
+  "collections:write",
+  "annotations:read",
+  "annotations:write",
+  "reading:read",
+  "vocabulary:read",
+  "vocabulary:write",
+  "conversations:read",
+  "agent:tools",
+  "service:network",
+  "service:llm",
+  "service:dictionary",
+  "service:clipboard",
+]);
 
 const problems = [];
 const problem = (message) => problems.push(message);

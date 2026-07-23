@@ -30,7 +30,7 @@ accepted if you prefer it.
 Updates are the same flow: bump `version` in both `manifest.json` and
 `registry.json` in one PR.
 
-The three official plugins are authored in TypeScript (`plugins/*/src/`)
+The official plugins are authored in TypeScript (`plugins/*/src/`)
 with their built `main.js` committed — use them as living examples.
 
 ## manifest.json
@@ -40,19 +40,23 @@ with their built `main.js` committed — use them as living examples.
   "id": "my-plugin",
   "name": "My Plugin",
   "version": "0.1.0",
-  "minAppVersion": "0.2.0",
+  "minAppVersion": "0.3.0",
   "description": "One sentence about what it does.",
   "author": "you",
-  "permissions": ["network"],
+  "permissions": ["service:network"],
   "main": "main.js"
 }
 ```
 
 - `id` — lowercase letters, digits, hyphens (max 64 chars); must equal the
   folder name.
-- `permissions` — only what you use, from: `reading-data` (read books,
-  highlights, notes), `network` (`ctx.fetch`), `ai` (register agent tools),
-  `clipboard` (write). Users see these before installing.
+- `permissions` — only what you use. Data permissions are
+  `<domain>:read` / `<domain>:write` per domain (write implies read):
+  `books`, `collections`, `annotations`, `reading` (read-only),
+  `vocabulary`, `conversations` (read-only). `agent:tools` registers tools
+  on the reading agent; services are `service:network`, `service:llm`,
+  `service:dictionary`, `service:clipboard`. Users see every declared
+  permission before installing.
 - `main` — the entry module, default `main.js`.
 
 ## Plugin API in one screen
@@ -85,9 +89,16 @@ export default {
     // Command palette
     ctx.ui.registerCommand({ id: "hello", title: "My Plugin: hello", run: () => {} });
 
-    // Agent tools (requires the "ai" permission) — the reading agent can
-    // call these during chat, namespaced plugin_<id>_<name>
-    ctx.ai?.registerTool({
+    // Data domains — reads, event subscriptions, and (with the write
+    // permission) commands issued through the app's own event-sourced
+    // write path, attributed to your plugin in the event log
+    ctx.annotations?.on("highlight.created", ({ payload }) => {
+      ctx.ui.showToast(`Highlighted: ${payload.text.slice(0, 24)}…`);
+    });
+
+    // Agent tools (requires "agent:tools") — the reading agent can call
+    // these during chat, namespaced plugin_<id>_<name>
+    ctx.agent?.registerTool({
       name: "my_tool",
       description: "What the model should know about this tool.",
       parameters: { type: "object", properties: {} },
@@ -97,14 +108,15 @@ export default {
 };
 ```
 
-UI is declarative only — three view kinds (`markdown`, `list`, `form`),
-rendered by the app's design system. A list item or form submit may return
-`{ view }` to chain deeper, `{ toast }` for a notice, or `{ close: true }`.
-Icons are picked by name from the app's curated Phosphor set. Persistent
-state goes through `ctx.storage` (namespaced key-value).
+UI is declarative only — view kinds `markdown`, `list`, `form`, and the
+compositional `blocks`, rendered by the app's design system. A list item or
+form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
+or `{ close: true }`. Icons are picked by name from the app's curated
+Phosphor set. Persistent state goes through `ctx.storage` (namespaced
+key-value).
 
-The full contract lives in the app repository:
-`apps/web/src/features/plugins/lib/plugin-types.ts`.
+The full contract is `types/plugin-api.d.ts` in this repository (a mirror of
+`packages/plugin-types` in the app repository).
 
 ## Review expectations
 

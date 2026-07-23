@@ -2,16 +2,16 @@
  * Annotation Tools — an official example plugin (TypeScript source; `main.js`
  * is the built output).
  *
- * Demonstrates the AI mount point: tools registered here join the reading
+ * Demonstrates the agent mount point: tools registered here join the reading
  * agent's tool set as `plugin_annotation_tools_<name>`, callable in any chat.
- * Requires the `ai` permission (register) and `reading-data` (what the tools
+ * Requires `agent:tools` (register) and `annotations:read` (what the tools
  * actually read).
  */
 import type { PluginContext, PluginModule } from "../../../types/plugin-api";
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {
-    ctx.ai!.registerTool({
+    ctx.agent!.registerTool({
       name: "count_annotations",
       label: "Count annotations",
       description:
@@ -28,9 +28,7 @@ const plugin: PluginModule = {
       },
       execute: async (params) => {
         const bookId = typeof params.bookId === "string" ? params.bookId : undefined;
-        const annotations = await ctx.reading!.listAnnotations(
-          bookId ? { bookId } : undefined,
-        );
+        const annotations = await ctx.annotations!.list(bookId ? { bookId } : undefined);
         return {
           total: annotations.length,
           highlights: annotations.filter((a) => a.kind === "highlight").length,
@@ -40,7 +38,7 @@ const plugin: PluginModule = {
       },
     });
 
-    ctx.ai!.registerTool({
+    ctx.agent!.registerTool({
       name: "list_recent_annotations",
       label: "Recent annotations",
       description:
@@ -60,15 +58,15 @@ const plugin: PluginModule = {
           typeof params.limit === "number" && params.limit > 0
             ? Math.min(50, Math.floor(params.limit))
             : 10;
-        const annotations = await ctx.reading!.listAnnotations();
+        const annotations = await ctx.annotations!.list();
         return annotations
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, limit)
           .map((a) => ({
             bookId: a.bookId,
             kind: a.kind,
-            text: a.text,
-            note: a.content,
+            text: a.kind === "note" ? (a.quotedText ?? "") : a.text,
+            note: a.kind === "note" ? a.body : undefined,
             createdAt: a.createdAt,
           }));
       },

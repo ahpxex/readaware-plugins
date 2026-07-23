@@ -1,8 +1,9 @@
 // plugins/shelf-report/src/main.ts
-function progressLabel(fraction) {
-  if (typeof fraction !== "number" || Number.isNaN(fraction))
+function progressLabel(percent) {
+  if (typeof percent !== "number" || Number.isNaN(percent) || percent <= 0) {
     return "not started";
-  return `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+  }
+  return `${Math.round(Math.min(100, Math.max(0, percent)))}%`;
 }
 var plugin = {
   activate(ctx) {
@@ -13,17 +14,21 @@ var plugin = {
       surface: "shelf",
       presentation: "page",
       view: async () => {
-        const books = await ctx.reading.listBooks();
+        const [books, states] = await Promise.all([
+          ctx.books.list(),
+          ctx.reading.listStates()
+        ]);
+        const progressByBook = new Map(states.map((s) => [s.bookId, s.progressPercent]));
         return {
           kind: "list",
           emptyText: "No books on the shelf yet.",
           items: books.map((book) => ({
             id: book.id,
             title: book.title,
-            subtitle: `${book.author ?? "Unknown author"} · ${progressLabel(book.progressFraction)}`,
+            subtitle: `${book.author ?? "Unknown author"} · ${progressLabel(progressByBook.get(book.id))}`,
             icon: "book-open",
             onSelect: async () => {
-              const annotations = await ctx.reading.listAnnotations({ bookId: book.id });
+              const annotations = await ctx.annotations.list({ bookId: book.id });
               const highlights = annotations.filter((a) => a.kind === "highlight").length;
               const notes = annotations.filter((a) => a.kind === "note").length;
               const asks = annotations.filter((a) => a.kind === "ask").length;
@@ -35,7 +40,7 @@ var plugin = {
                     `**${book.title}**`,
                     book.author ? `by ${book.author}` : null,
                     "",
-                    `- Progress: ${progressLabel(book.progressFraction)}`,
+                    `- Progress: ${progressLabel(progressByBook.get(book.id))}`,
                     `- Highlights: ${highlights}`,
                     `- Notes: ${notes}`,
                     `- Questions asked: ${asks}`

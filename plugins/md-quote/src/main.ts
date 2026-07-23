@@ -5,7 +5,7 @@
  *
  * Demonstrates: a selection action with a silent (toast) outcome, a reader
  * header popup, a command-palette command opening a settings form, namespaced
- * storage, and the `clipboard` permission.
+ * storage, and the `service:clipboard` permission.
  */
 import type { PluginContext, PluginModule } from "../../../types/plugin-api";
 
