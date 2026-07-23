@@ -23,8 +23,6 @@ const KNOWN_PERMISSIONS = new Set([
   "annotations:read",
   "annotations:write",
   "reading:read",
-  "vocabulary:read",
-  "vocabulary:write",
   "conversations:read",
   "agent:tools",
   "service:network",

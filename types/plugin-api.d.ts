@@ -11,7 +11,7 @@
  * The contract is DERIVED from the app's domain model, not authored beside it:
  *
  * 1. **Data surface per domain.** Each domain (books, collections,
- *    annotations, reading, vocabulary, conversations) exposes three things:
+ *    annotations, reading, conversations) exposes three things:
  *    *reads* mirroring its projection read models, *writes* mirroring exactly
  *    its domain-event verbs (commands issued through the same event-sourced
  *    write path the app itself uses), and *subscriptions* to its domain
@@ -46,7 +46,7 @@ export type CoverStatus = "unchecked" | "ready" | "none" | "failed";
  */
 export type EventOrigin = "user" | "agent" | "system" | `plugin:${string}`;
 
-/** Snapshot of a dictionary entry as embedded in vocabulary events. */
+/** Snapshot of a dictionary entry as produced by the dictionary service. */
 export interface DictionaryEntrySnapshot {
   headword: string;
   pronunciation?: string;
@@ -77,8 +77,6 @@ export type PluginPermission =
   | "annotations:read"
   | "annotations:write"
   | "reading:read"
-  | "vocabulary:read"
-  | "vocabulary:write"
   | "conversations:read"
   | "agent:tools"
   | "service:network"
@@ -370,16 +368,6 @@ export type PluginDomainEventPayloadMap = {
     text: string;
   };
   "ask.removed": { askId: string };
-  "vocabulary.added": {
-    entryId: string;
-    term: string;
-    language: string;
-    entry: DictionaryEntrySnapshot;
-    context?: string;
-    bookId?: string;
-    bookTitle?: string;
-  };
-  "vocabulary.removed": { entryId: string };
   "aiConversation.started": {
     conversationId: string;
     /** Absent on global (Context page) threads. */
@@ -454,8 +442,6 @@ export type AnnotationDomainEventType =
   | "ask.removed";
 
 export type ReadingDomainEventType = "reading.progressed" | "reading.timeRecorded";
-
-export type VocabularyDomainEventType = "vocabulary.added" | "vocabulary.removed";
 
 export type ConversationDomainEventType =
   | "aiConversation.started"
@@ -573,17 +559,6 @@ export type PluginDictionaryResult = {
   entry: PluginDictionaryEntry;
 };
 
-export type PluginVocabularyEntry = {
-  term: string;
-  language: string;
-  /** One-line rendering of the first sense. */
-  definition: string;
-  entry: PluginDictionaryEntry;
-  context?: string;
-  bookId?: string;
-  bookTitle?: string;
-  addedAt: string;
-};
 
 export type PluginChatMessage = {
   id: string;
@@ -725,24 +700,6 @@ export type PluginReadingApi = {
   on: DomainSubscribe<ReadingDomainEventType>;
 };
 
-/** Vocabulary — the notebook the reader's dictionary saves into. */
-export type PluginVocabularyApi = {
-  list(filter?: { query?: string; limit?: number }): Promise<PluginVocabularyEntry[]>;
-  on: DomainSubscribe<VocabularyDomainEventType>;
-  /** Present with `vocabulary:write`. */
-  write?: {
-    add(input: {
-      term: string;
-      language: string;
-      entry: PluginDictionaryEntry;
-      context?: string;
-      bookId?: string;
-      bookTitle?: string;
-    }): Promise<void>;
-    remove(term: string, language: string): Promise<void>;
-  };
-};
-
 /**
  * Conversations — read-only view over the user's AI threads (one persistent
  * thread per book, plus user-created global threads). Writes stay with the
@@ -763,6 +720,35 @@ export type PluginStorage = {
   get<T = unknown>(key: string): T | null;
   set(key: string, value: unknown): void;
   remove(key: string): void;
+  /**
+   * A named document collection — structured plugin-private data one tier
+   * above the KV (queryable, per-document, optionally book-anchored).
+   * Lifecycle belongs to the plugin (uninstall clears it). `bookId`/`anchor`
+   * are provenance INDEXES, not ownership — documents survive the referenced
+   * book's deletion.
+   */
+  collection(name: string): PluginDocumentCollection;
+};
+
+export type PluginDocument<T = unknown> = {
+  id: string;
+  data: T;
+  bookId?: string;
+  anchor?: string;
+  /** ISO timestamp of the last write. */
+  updatedAt: string;
+};
+
+export type PluginDocumentCollection = {
+  put(id: string, data: unknown, options?: { bookId?: string; anchor?: string }): Promise<void>;
+  get<T = unknown>(id: string): Promise<PluginDocument<T> | null>;
+  delete(id: string): Promise<void>;
+  /** Newest-first by default. */
+  list<T = unknown>(filter?: {
+    bookId?: string;
+    limit?: number;
+    oldestFirst?: boolean;
+  }): Promise<PluginDocument<T>[]>;
 };
 
 /**
@@ -806,8 +792,6 @@ export type PluginContext = {
   annotations?: PluginAnnotationsApi;
   /** `reading:read`. */
   reading?: PluginReadingApi;
-  /** `vocabulary:read` or `vocabulary:write`. */
-  vocabulary?: PluginVocabularyApi;
   /** `conversations:read`. */
   conversations?: PluginConversationsApi;
   /** `agent:tools` — extend the reading agent. */
