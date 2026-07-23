@@ -380,6 +380,30 @@ export type PluginDomainEventPayloadMap = {
     bookTitle?: string;
   };
   "vocabulary.removed": { entryId: string };
+  "aiConversation.started": {
+    conversationId: string;
+    /** Absent on global (Context page) threads. */
+    bookId?: string;
+    title?: string;
+  };
+  "aiMessage.appended": {
+    messageId: string;
+    conversationId: string;
+    role: "user" | "assistant";
+    seq: number;
+    content: string;
+    model?: string;
+    attachments?: Array<{
+      attachmentId: string;
+      kind?: "selection";
+      text: string;
+      anchor?: string;
+      chapterHref?: string;
+    }>;
+  };
+  /** A message left the transcript (retry/regenerate truncation). */
+  "aiMessage.removed": { messageId: string; conversationId: string };
+  "aiConversation.cleared": { conversationId: string };
 };
 
 export type DomainEventType = keyof PluginDomainEventPayloadMap;
@@ -432,6 +456,12 @@ export type AnnotationDomainEventType =
 export type ReadingDomainEventType = "reading.progressed" | "reading.timeRecorded";
 
 export type VocabularyDomainEventType = "vocabulary.added" | "vocabulary.removed";
+
+export type ConversationDomainEventType =
+  | "aiConversation.started"
+  | "aiMessage.appended"
+  | "aiMessage.removed"
+  | "aiConversation.cleared";
 
 /**
  * Session facts — runtime state of the open reader, NOT domain events (they
@@ -715,9 +745,8 @@ export type PluginVocabularyApi = {
 
 /**
  * Conversations — read-only view over the user's AI threads (one persistent
- * thread per book, plus user-created global threads). No `on`: the
- * conversation domain events have no live producer yet — a subscription that
- * never fires would be a lie; it arrives when the chat layer dual-writes.
+ * thread per book, plus user-created global threads). Writes stay with the
+ * chat runtime; its dual-write is what feeds `on`.
  */
 export type PluginConversationsApi = {
   /** The book's persistent thread, oldest first; empty when none. */
@@ -725,6 +754,7 @@ export type PluginConversationsApi = {
   /** User-created global (Context page) threads. */
   listThreads(): Promise<PluginThreadSummary[]>;
   getThread(threadId: string): Promise<PluginChatMessage[]>;
+  on: DomainSubscribe<ConversationDomainEventType>;
 };
 
 // ─── Context handed to activate() ────────────────────────────────────────────
