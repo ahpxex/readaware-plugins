@@ -54,10 +54,64 @@ with their built `main.js` committed — use them as living examples.
   `<domain>:read` / `<domain>:write` per domain (write implies read):
   `shelf` (books incl. chapter text, collections, and reading stats),
   `annotations`, `conversations` (read-only). `agent:tools` registers tools
-  on the reading agent; services are `service:network`, `service:llm`
+  on the reading agent; `ui:themes` unlocks the declarative `themes`/`fonts`
+  fields below; services are `service:network`, `service:llm`
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
+
+## Themes and bundled fonts (`ui:themes`)
+
+A theme plugin is pure data — the manifest declares palettes and font files,
+the app validates them and generates all CSS. Nothing applies until the user
+selects the theme in Settings. A minimal theme-only plugin's `main.js` is
+just `export default { activate() {} }`.
+
+```json
+{
+  "permissions": ["ui:themes"],
+  "fonts": [
+    {
+      "id": "my-serif",
+      "family": "My Serif",
+      "kind": "serif",
+      "files": [{ "path": "assets/my-serif-400.woff2", "weight": 400 }]
+    }
+  ],
+  "themes": [
+    {
+      "id": "dusk",
+      "name": { "default": "Dusk", "translations": { "zh-Hans": "暮色" } },
+      "polarity": "dark",
+      "app": { "paper": "#14171e", "fg": "#e3e6ec" },
+      "reader": {
+        "palette": {
+          "bg": "#161a22", "text": "#ccd2dd",
+          "selection": "rgba(154, 162, 177, 0.28)",
+          "rule": "rgba(204, 210, 221, 0.18)",
+          "faint": "rgba(204, 210, 221, 0.07)",
+          "muted": "rgba(204, 210, 221, 0.55)"
+        },
+        "typography": { "fontFamily": "plugin:my-serif", "fontSize": "large" }
+      }
+    }
+  ]
+}
+```
+
+- A theme has a light/dark `polarity` and two independent, optional parts:
+  `app` (app-chrome token overrides — see `PluginAppThemeTokens` in the
+  typings for the vocabulary) and `reader` (the six-color book-page palette,
+  plus an optional typography preset applied once when the user selects the
+  theme).
+- Colors must be plain hex or `rgb()`/`rgba()`/`hsl()`/`hsla()` — keywords,
+  `var()`, and `url()` are rejected.
+- Font files (`.woff2`/`.woff`/`.ttf`/`.otf`) ship inside the plugin folder
+  and **must be listed in the registry entry's `files`** so installs fetch
+  them (binary files are supported). A theme references its own fonts as
+  `plugin:<fontId>`.
+- Set `minAppVersion` to the first app version with theme support — older
+  apps reject the `ui:themes` permission at install.
 
 ## Plugin API in one screen
 
