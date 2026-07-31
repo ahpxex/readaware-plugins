@@ -10,13 +10,14 @@
  *
  * The contract is DERIVED from the app's domain model, not authored beside it:
  *
- * 1. **Data surface per domain.** Each domain (books, collections,
- *    annotations, reading, conversations) exposes three things:
+ * 1. **Data surface per domain.** Each domain (shelf — books, collections,
+ *    and reading stats as one library-management surface — plus annotations
+ *    and conversations) exposes three things:
  *    *reads* mirroring its projection read models, *writes* mirroring exactly
  *    its domain-event verbs (commands issued through the same event-sourced
  *    write path the app itself uses), and *subscriptions* to its domain
  *    events under their canonical names — one vocabulary, no parallel rename.
- * 2. **Permission = domain × access.** `books:read`, `annotations:write`, …
+ * 2. **Permission = domain × access.** `shelf:read`, `annotations:write`, …
  *    Write implies read within a domain. Services (`service:*`) and the agent
  *    tool mount (`agent:tools`) are separate permission families.
  * 3. **Origin on every write.** Plugin writes are stamped
@@ -61,27 +62,24 @@ export interface DictionaryEntrySnapshot {
  * Permission domains a manifest may declare (docs/plugin-system.md §4).
  *
  * - `<domain>:read` / `<domain>:write` — data access per domain; write
- *   implies the domain's read surface.
+ *   implies the domain's read surface. `shelf` covers the whole of library
+ *   management: books (incl. content reads), collections, and reading stats.
  * - `agent:tools` — register tools on the reading agent.
- * - `service:*` — platform and AI services (network, one-shot LLM, the
- *   built-in dictionary, clipboard).
+ * - `service:*` — platform and AI services (network, one-shot LLM,
+ *   clipboard).
  *
- * Namespaced storage, UI contributions, session events, and ambient reader
- * control are not permissions — every plugin has them.
+ * Namespaced storage, UI contributions, session events, the app locale, and
+ * ambient reader control are not permissions — every plugin has them.
  */
 export type PluginPermission =
-  | "books:read"
-  | "books:write"
-  | "collections:read"
-  | "collections:write"
+  | "shelf:read"
+  | "shelf:write"
   | "annotations:read"
   | "annotations:write"
-  | "reading:read"
   | "conversations:read"
   | "agent:tools"
   | "service:network"
   | "service:llm"
-  | "service:dictionary"
   | "service:clipboard";
 
 // ─── Manifest ────────────────────────────────────────────────────────────────
@@ -287,6 +285,18 @@ export type PluginHeaderAction = {
   view: (input: HeaderActionInput) => PluginView | Promise<PluginView>;
 };
 
+/**
+ * A key chord for a command's default binding. `mod` is the platform command
+ * key (⌘ on macOS, Ctrl elsewhere); `key` is a `KeyboardEvent.key`, single
+ * characters lowercased.
+ */
+export type PluginShortcut = {
+  key: string;
+  mod?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+};
+
 /** A command-palette entry. */
 export type PluginCommand = {
   id: string;
@@ -294,6 +304,12 @@ export type PluginCommand = {
   icon?: string;
   /** Extra text folded into palette matching. */
   keywords?: string;
+  /**
+   * Optional default key binding. Every registered command is bindable in
+   * Settings → Shortcuts whether or not it declares one; the user can rebind
+   * it there, and their override wins over this default.
+   */
+  defaultShortcut?: PluginShortcut;
   run: () => PluginViewResult | Promise<PluginViewResult>;
 };
 
@@ -309,7 +325,32 @@ export type PluginToolDefinition = {
   label?: string;
   description: string;
   parameters?: Record<string, unknown>;
+  /**
+   * Resolve with any JSON value — it is serialized as the tool result the
+   * model reads. Resolve with `{ gist, wordCards }` (PluginToolWordCards) to
+   * additionally render word cards in the chat turn: the reader sees the full
+   * entries as cards at the tool's position, the model sees only `gist`.
+   */
   execute: (params: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+/** One word card a tool result can carry (full entry, host-rendered). */
+export type PluginToolWordCard = {
+  /** The headword, in its original language. */
+  term: string;
+  /** Human-readable name of the language the entry explains in. */
+  language: string;
+  entry: PluginDictionaryEntry;
+};
+
+/**
+ * Card-carrying tool result: `gist` is what the model receives (keep it to a
+ * one-line summary — the card IS the content); `wordCards` render as word
+ * cards in the chat.
+ */
+export type PluginToolWordCards = {
+  gist: unknown;
+  wordCards: PluginToolWordCard[];
 };
 
 // ─── Events ──────────────────────────────────────────────────────────────────
@@ -334,13 +375,15 @@ export type PluginDomainEventPayloadMap = {
   "book.coverExtracted": { bookId: string; status: CoverStatus; coverBlobKey?: string };
   "book.opened": { bookId: string };
   "book.starred": { bookId: string; starred: boolean };
+  /** The reader's own "I finished this" verdict; distinct from reaching 100%. */
+  "book.finished": { bookId: string; finished: boolean };
   "book.removed": { bookId: string };
   "collection.created": { collectionId: string; name: string };
   "collection.renamed": { collectionId: string; name: string };
   "collection.removed": { collectionId: string };
   "book.addedToCollection": { bookId: string; collectionId: string };
   "book.removedFromCollection": { bookId: string; collectionId: string };
-  "reading.progressed": {
+  "book.progressed": {
     bookId: string;
     locator: string;
     chapterHref?: string;
@@ -349,7 +392,7 @@ export type PluginDomainEventPayloadMap = {
     progressPercent?: number;
     status?: ReadingStatus;
   };
-  "reading.timeRecorded": {
+  "book.timeRecorded": {
     bookId: string;
     ms: number;
     atEpochMs: number;
@@ -434,20 +477,22 @@ export type DomainSubscribe<E extends DomainEventType> = <K extends E>(
   handler: (event: PluginDomainEvent<K>) => void,
 ) => PluginDisposable;
 
-export type BookDomainEventType =
+/** Everything library management emits — books, collections, reading facts. */
+export type ShelfDomainEventType =
   | "book.imported"
   | "book.metadataEdited"
   | "book.coverExtracted"
   | "book.opened"
   | "book.starred"
-  | "book.removed";
-
-export type CollectionDomainEventType =
+  | "book.finished"
+  | "book.removed"
   | "collection.created"
   | "collection.renamed"
   | "collection.removed"
   | "book.addedToCollection"
-  | "book.removedFromCollection";
+  | "book.removedFromCollection"
+  | "book.progressed"
+  | "book.timeRecorded";
 
 export type AnnotationDomainEventType =
   | "highlight.created"
@@ -458,8 +503,6 @@ export type AnnotationDomainEventType =
   | "note.removed"
   | "ask.recorded"
   | "ask.removed";
-
-export type ReadingDomainEventType = "reading.progressed" | "reading.timeRecorded";
 
 export type ConversationDomainEventType =
   | "aiConversation.started"
@@ -547,7 +590,8 @@ export type PluginAsk = {
 
 export type PluginAnnotation = PluginHighlight | PluginNote | PluginAsk;
 
-export type PluginReadingState = {
+/** One book through the shelf's stats face: position, status, and time. */
+export type PluginBookStats = {
   bookId: string;
   /** 0..100. */
   progressPercent: number;
@@ -557,10 +601,6 @@ export type PluginReadingState = {
   chapterHref?: string;
   currentLocation?: number;
   totalLocations?: number;
-};
-
-export type PluginReadingTime = {
-  bookId: string;
   /** Cumulative active reading time in ms. */
   totalMs: number;
   firstReadAt?: string;
@@ -569,13 +609,25 @@ export type PluginReadingTime = {
   daily: Record<string, number>;
 };
 
-export type PluginDictionaryEntry = DictionaryEntrySnapshot;
-
-export type PluginDictionaryResult = {
-  /** The explanation language the entry was produced in. */
-  language: string;
-  entry: PluginDictionaryEntry;
+/** Whole-shelf aggregate over every book's recorded reading. */
+export type PluginStatsOverview = {
+  totalMs: number;
+  /** Active ms per local day across all books, keyed YYYY-MM-DD. */
+  daily: Record<string, number>;
+  firstReadAt?: string;
+  lastReadAt?: string;
+  /** Books currently in progress (status "reading"). */
+  booksReading: number;
+  booksFinished: number;
 };
+
+/**
+ * A structured dictionary entry — the shape the `dictionary` view block and
+ * word-card tool results render with the app's own dictionary UX. Producing
+ * entries is plugin business (e.g. via `llm.ask` with a schema); this is the
+ * presentation contract.
+ */
+export type PluginDictionaryEntry = DictionaryEntrySnapshot;
 
 
 export type PluginChatMessage = {
@@ -608,66 +660,78 @@ export type PluginBookContent = {
 // ─── Domain APIs ─────────────────────────────────────────────────────────────
 
 /**
- * Books — `books:read` grants the read surface; `books:write` additionally
- * grants `write` (and implies read). Chapter text/TOC are content-layer reads
- * over the imported file (extraction runs on demand).
+ * Shelf — the whole of library management under one permission domain.
+ * `shelf:read` grants the read surface; `shelf:write` additionally grants
+ * the `write` faces (and implies read). Chapter text/TOC are content-layer
+ * reads over the imported file (extraction runs on demand). Stats are
+ * read-only for every actor: their domain events are recorded facts of
+ * reader activity, not user-intent commands.
  */
-export type PluginBooksApi = {
-  list(): Promise<PluginBook[]>;
-  get(bookId: string): Promise<PluginBook | null>;
-  getToc(bookId: string): Promise<PluginChapterRef[]>;
-  /** Plain text of one chapter by its toc index; null when unavailable. */
-  getChapterText(bookId: string, chapterIndex: number): Promise<string | null>;
-  on: DomainSubscribe<BookDomainEventType>;
-  /** Present with `books:write`. Commands mirror the book domain-event verbs. */
-  write?: {
-    /** Import a real file; the result is a first-class book. */
-    import(input: { fileName: string; data: ArrayBuffer | Uint8Array }): Promise<PluginBook>;
-    editMetadata(bookId: string, patch: { title?: string; author?: string }): Promise<void>;
-    setStarred(bookId: string, starred: boolean): Promise<void>;
-    /**
-     * Remove a book from the shelf — irreversible for the source file. The
-     * removal is logged with this plugin's origin.
-     */
-    remove(bookId: string): Promise<void>;
-    /**
-     * Content-provider path — no file at all. Register a provider, then add
-     * virtual books bound to it: shelf entries whose content the plugin
-     * serves at open time (sections of HTML). The reader paginates,
-     * annotates, and tracks progress on them like any book. Virtual books
-     * are device-local (their content depends on this plugin being
-     * installed), so they stay outside the synced event log.
-     */
-    registerContentProvider(provider: {
-      id: string;
-      load(key: string): Promise<PluginBookContent>;
-    }): PluginDisposable;
-    addVirtualBook(input: {
-      providerId: string;
-      /** Stable identity within the provider (e.g. the feed URL). */
-      key: string;
-      title: string;
-      author?: string;
-    }): Promise<PluginBook>;
-    removeVirtualBook(input: { providerId: string; key: string }): Promise<void>;
+export type PluginShelfApi = {
+  books: {
+    list(): Promise<PluginBook[]>;
+    get(bookId: string): Promise<PluginBook | null>;
+    getToc(bookId: string): Promise<PluginChapterRef[]>;
+    /** Plain text of one chapter by its toc index; null when unavailable. */
+    getChapterText(bookId: string, chapterIndex: number): Promise<string | null>;
+    /** Present with `shelf:write`. Commands mirror the book domain-event verbs. */
+    write?: {
+      /** Import a real file; the result is a first-class book. */
+      import(input: { fileName: string; data: ArrayBuffer | Uint8Array }): Promise<PluginBook>;
+      editMetadata(bookId: string, patch: { title?: string; author?: string }): Promise<void>;
+      setStarred(bookId: string, starred: boolean): Promise<void>;
+      /** The reader's "I finished this" verdict; sticky against further reading. */
+      setFinished(bookId: string, finished: boolean): Promise<void>;
+      /**
+       * Remove a book from the shelf — irreversible for the source file. The
+       * removal is logged with this plugin's origin.
+       */
+      remove(bookId: string): Promise<void>;
+      /**
+       * Content-provider path — no file at all. Register a provider, then add
+       * virtual books bound to it: shelf entries whose content the plugin
+       * serves at open time (sections of HTML). The reader paginates,
+       * annotates, and tracks progress on them like any book. Virtual books
+       * are device-local (their content depends on this plugin being
+       * installed), so they stay outside the synced event log.
+       */
+      registerContentProvider(provider: {
+        id: string;
+        load(key: string): Promise<PluginBookContent>;
+      }): PluginDisposable;
+      addVirtualBook(input: {
+        providerId: string;
+        /** Stable identity within the provider (e.g. the feed URL). */
+        key: string;
+        title: string;
+        author?: string;
+      }): Promise<PluginBook>;
+      removeVirtualBook(input: { providerId: string; key: string }): Promise<void>;
+    };
   };
-};
-
-/** Collections — the shelf's user-defined groups (single-membership today). */
-export type PluginCollectionsApi = {
-  list(): Promise<PluginCollection[]>;
-  /** Ids of the books currently in a collection. */
-  booksIn(collectionId: string): Promise<string[]>;
-  on: DomainSubscribe<CollectionDomainEventType>;
-  /** Present with `collections:write`. */
-  write?: {
-    create(name: string): Promise<PluginCollection>;
-    rename(collectionId: string, name: string): Promise<void>;
-    /** Delete the collection; its books stay, ungrouped. */
-    remove(collectionId: string): Promise<void>;
-    /** Assign books to a collection, or `null` to ungroup them. */
-    assignBooks(bookIds: string[], collectionId: string | null): Promise<void>;
+  /** The shelf's user-defined groups (single-membership today). */
+  collections: {
+    list(): Promise<PluginCollection[]>;
+    /** Ids of the books currently in a collection. */
+    booksIn(collectionId: string): Promise<string[]>;
+    /** Present with `shelf:write`. */
+    write?: {
+      create(name: string): Promise<PluginCollection>;
+      rename(collectionId: string, name: string): Promise<void>;
+      /** Delete the collection; its books stay, ungrouped. */
+      remove(collectionId: string): Promise<void>;
+      /** Assign books to a collection, or `null` to ungroup them. */
+      assignBooks(bookIds: string[], collectionId: string | null): Promise<void>;
+    };
   };
+  /** Positions, statuses, and active reading time — per book and aggregate. */
+  stats: {
+    forBook(bookId: string): Promise<PluginBookStats | null>;
+    list(): Promise<PluginBookStats[]>;
+    /** Whole-shelf aggregate: total time, per-day time, status counts. */
+    overview(): Promise<PluginStatsOverview>;
+  };
+  on: DomainSubscribe<ShelfDomainEventType>;
 };
 
 /**
@@ -703,19 +767,6 @@ export type PluginAnnotationsApi = {
     updateNote(noteId: string, body: string): Promise<void>;
     removeNote(noteId: string): Promise<void>;
   };
-};
-
-/**
- * Reading — positions, statuses, and active reading time. Read-only by
- * design: its domain events are recorded facts of reader activity (the
- * engine and the time tracker emit them), not user-intent commands, so there
- * is no write surface for any actor — plugins included.
- */
-export type PluginReadingApi = {
-  getState(bookId: string): Promise<PluginReadingState | null>;
-  listStates(): Promise<PluginReadingState[]>;
-  getTime(bookId: string): Promise<PluginReadingTime | null>;
-  on: DomainSubscribe<ReadingDomainEventType>;
 };
 
 /**
@@ -778,6 +829,11 @@ export type PluginDocumentCollection = {
 export type PluginContext = {
   readonly manifest: Readonly<PluginManifest>;
   readonly appVersion: string;
+  /**
+   * The app UI's current locale (BCP-47, e.g. "zh-Hans"). Tracks the user's
+   * language setting live — read it at use time, don't copy it at activate().
+   */
+  readonly locale: string;
   /** Namespaced key-value storage, persisted with the app's local data. */
   storage: PluginStorage;
   ui: {
@@ -802,14 +858,10 @@ export type PluginContext = {
       handler: (payload: PluginSessionEventMap[K]) => void,
     ): PluginDisposable;
   };
-  /** `books:read` or `books:write`. */
-  books?: PluginBooksApi;
-  /** `collections:read` or `collections:write`. */
-  collections?: PluginCollectionsApi;
+  /** `shelf:read` or `shelf:write` — books, collections, and reading stats. */
+  shelf?: PluginShelfApi;
   /** `annotations:read` or `annotations:write`. */
   annotations?: PluginAnnotationsApi;
-  /** `reading:read`. */
-  reading?: PluginReadingApi;
   /** `conversations:read`. */
   conversations?: PluginConversationsApi;
   /** `agent:tools` — extend the reading agent. */
@@ -824,6 +876,11 @@ export type PluginContext = {
    * `service:llm` — a one-shot model call on the user's configured account
    * (fast tier by default) — no thread, no memory, no tools. Rejects when AI
    * is not configured.
+   *
+   * With `schema` (JSON Schema: type/properties/required/items/enum) the host
+   * runs structured mode: it instructs the model to answer with JSON only,
+   * parses and validates the reply, retries once with the violation list, and
+   * resolves with the parsed object — the plugin never sees raw model text.
    */
   llm?: {
     ask(input: {
@@ -832,18 +889,12 @@ export type PluginContext = {
       /** Model tier on the user's account; defaults to "fast". */
       model?: "fast" | "smart";
     }): Promise<string>;
-  };
-  /**
-   * `service:dictionary` — the app's built-in dictionary; shares its cache
-   * with the reader's own look-ups. Uses the user's configured AI model;
-   * rejects when AI is not configured.
-   */
-  dictionary?: {
-    lookUp(input: {
-      term: string;
-      context?: string;
-      bookTitle?: string;
-    }): Promise<PluginDictionaryResult>;
+    ask(input: {
+      prompt: string;
+      system?: string;
+      model?: "fast" | "smart";
+      schema: Record<string, unknown>;
+    }): Promise<unknown>;
   };
   /** `service:clipboard`. */
   clipboard?: {

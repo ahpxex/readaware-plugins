@@ -1,10 +1,13 @@
 {
   "id": "shelf-report",
   "name": "Shelf Report",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "0.3.0",
   "description": "A full-page report over your shelf: progress per book, drill into annotation counts.",
   "author": "ReadAware",
-  "permissions": ["books:read", "reading:read", "annotations:read"],
+  "permissions": [
+    "shelf:read",
+    "annotations:read"
+  ],
   "main": "main.js"
 }

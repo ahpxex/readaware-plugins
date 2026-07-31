@@ -15,8 +15,8 @@ var plugin = {
       presentation: "page",
       view: async () => {
         const [books, states] = await Promise.all([
-          ctx.books.list(),
-          ctx.reading.listStates()
+          ctx.shelf.books.list(),
+          ctx.shelf.stats.list()
         ]);
         const progressByBook = new Map(states.map((s) => [s.bookId, s.progressPercent]));
         return {

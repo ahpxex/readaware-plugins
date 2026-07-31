@@ -24,27 +24,14 @@
       ]
     },
     {
-      "id": "rss-reader",
-      "name": "RSS Reader",
-      "version": "0.4.0",
-      "description": "Subscribe to RSS/Atom feeds and read each one as a book on your shelf — articles become chapters.",
-      "author": "ReadAware",
-      "minAppVersion": "0.3.0",
-      "permissions": [
-        "service:network",
-        "books:write"
-      ]
-    },
-    {
       "id": "shelf-report",
       "name": "Shelf Report",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "A full-page report over your shelf: progress per book, drill into annotation counts.",
       "author": "ReadAware",
       "minAppVersion": "0.3.0",
       "permissions": [
-        "books:read",
-        "reading:read",
+        "shelf:read",
         "annotations:read"
       ]
     }

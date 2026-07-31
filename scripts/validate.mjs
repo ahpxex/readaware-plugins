@@ -16,18 +16,14 @@ import { join } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const KNOWN_PERMISSIONS = new Set([
-  "books:read",
-  "books:write",
-  "collections:read",
-  "collections:write",
+  "shelf:read",
+  "shelf:write",
   "annotations:read",
   "annotations:write",
-  "reading:read",
   "conversations:read",
   "agent:tools",
   "service:network",
   "service:llm",
-  "service:dictionary",
   "service:clipboard",
 ]);
 

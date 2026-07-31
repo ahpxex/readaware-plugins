@@ -52,11 +52,11 @@ with their built `main.js` committed — use them as living examples.
   folder name.
 - `permissions` — only what you use. Data permissions are
   `<domain>:read` / `<domain>:write` per domain (write implies read):
-  `books`, `collections`, `annotations`, `reading` (read-only),
-  `vocabulary`, `conversations` (read-only). `agent:tools` registers tools
-  on the reading agent; services are `service:network`, `service:llm`,
-  `service:dictionary`, `service:clipboard`. Users see every declared
-  permission before installing.
+  `shelf` (books incl. chapter text, collections, and reading stats),
+  `annotations`, `conversations` (read-only). `agent:tools` registers tools
+  on the reading agent; services are `service:network`, `service:llm`
+  (supports structured JSON output via `schema`), and `service:clipboard`.
+  Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
 
 ## Plugin API in one screen

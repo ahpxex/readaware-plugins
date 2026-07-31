@@ -3,8 +3,8 @@
  * the built output).
  *
  * Demonstrates: a shelf header action registered as a full Page, the list
- * view with drill-down into a markdown detail, and read access across three
- * domains (`books:read`, `reading:read`, `annotations:read`).
+ * view with drill-down into a markdown detail, and read access across two
+ * domains (`shelf:read` for books + reading stats, `annotations:read`).
  */
 import type { PluginContext, PluginModule } from "../../../types/plugin-api";
 
@@ -25,8 +25,8 @@ const plugin: PluginModule = {
       presentation: "page",
       view: async () => {
         const [books, states] = await Promise.all([
-          ctx.books!.list(),
-          ctx.reading!.listStates(),
+          ctx.shelf!.books.list(),
+          ctx.shelf!.stats.list(),
         ]);
         const progressByBook = new Map(states.map((s) => [s.bookId, s.progressPercent]));
         return {
