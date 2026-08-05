@@ -323,10 +323,43 @@ export type PluginListView = {
   emptyText?: string;
 };
 
-export type PluginFormField =
-  | { kind: "text"; id: string; label: string; value?: string; placeholder?: string }
-  | { kind: "textarea"; id: string; label: string; value?: string; placeholder?: string; rows?: number }
-  | { kind: "number"; id: string; label: string; value?: number; min?: number; max?: number; step?: number }
+/** `agentHidden` keeps a declared setting out of the reading agent's settings
+ *  catalog (the Plugins panel still shows it); `inputMode: "password"` text
+ *  fields are agent-hidden automatically. Real credentials belong in
+ *  `ctx.secrets`, not in settings. */
+/** `agentHidden` keeps a declared setting out of the reading agent's settings
+ *  catalog (the Plugins panel still shows it); `inputMode: "password"` text
+ *  fields are agent-hidden automatically. Real credentials belong in
+ *  `ctx.secrets`, not in settings. */
+export type PluginFormField = { agentHidden?: boolean } & (
+  | {
+      kind: "text";
+      id: string;
+      label: string;
+      value?: string;
+      placeholder?: string;
+      helperText?: string;
+      inputMode?: "text" | "email" | "url" | "password";
+    }
+  | {
+      kind: "textarea";
+      id: string;
+      label: string;
+      value?: string;
+      placeholder?: string;
+      helperText?: string;
+      rows?: number;
+    }
+  | {
+      kind: "number";
+      id: string;
+      label: string;
+      value?: number;
+      helperText?: string;
+      min?: number;
+      max?: number;
+      step?: number;
+    }
   | {
       kind: "select";
       id: string;
@@ -334,7 +367,16 @@ export type PluginFormField =
       value?: string;
       options: { value: string; label: string }[];
     }
-  | { kind: "toggle"; id: string; label: string; value?: boolean };
+  | { kind: "toggle"; id: string; label: string; value?: boolean }
+  | { kind: "checkbox"; id: string; label: string; description?: string; value?: boolean }
+  | {
+      kind: "choice";
+      id: string;
+      label: string;
+      value?: string;
+      options: { value: string; label: string; icon?: string }[];
+    }
+);
 
 export type PluginFormValues = Record<string, string | boolean | number>;
 

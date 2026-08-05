@@ -44,7 +44,18 @@ with their built `main.js` committed — use them as living examples.
   "description": "One sentence about what it does.",
   "author": "you",
   "permissions": ["service:network"],
-  "main": "main.js"
+  "main": "main.js",
+  "settings": [
+    {
+      "kind": "number",
+      "id": "articleLimit",
+      "label": "Articles per feed",
+      "helperText": "Shown under the field in the Plugins panel.",
+      "value": 30,
+      "min": 5,
+      "max": 100
+    }
+  ]
 }
 ```
 
@@ -59,6 +70,16 @@ with their built `main.js` committed — use them as living examples.
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
+- `settings` — optional declarative settings (field kinds: `text`,
+  `textarea`, `number`, `select`, `toggle`, `checkbox`, `choice`). The app
+  renders them in **Settings → Plugins** and persists the values as ONE
+  object under your storage key `settings` — read them with
+  `ctx.storage.get("settings")`, and re-read on the storage-changed
+  notification if you cache them. The reading agent can view and change
+  these settings too, so users can just ask it ("set the article limit
+  to 50"); fields with `inputMode: "password"` or `agentHidden: true`
+  stay out of the agent's sight. Real credentials belong in
+  `ctx.secrets`, never in settings.
 
 ## Themes and bundled fonts (`ui:themes`)
 
