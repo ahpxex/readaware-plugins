@@ -80,6 +80,14 @@ with their built `main.js` committed — use them as living examples.
   to 50"); fields with `inputMode: "password"` or `agentHidden: true`
   stay out of the agent's sight. Real credentials belong in
   `ctx.secrets`, never in settings.
+- `schedules` — optional recurring tasks, e.g.
+  `[{ "id": "refresh", "label": "Refresh feeds", "everyMinutes": 60 }]`
+  (floor: 15 minutes). Declared here so users see them before installing;
+  bind the work in `activate` with
+  `ctx.schedule.on("refresh", async () => { ... })`. The host runs it AT
+  LEAST every `everyMinutes` while the app is open and catches up shortly
+  after launch when overdue — never at exact times, and never while the
+  app is closed.
 
 ## Themes and bundled fonts (`ui:themes`)
 
