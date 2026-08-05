@@ -191,6 +191,13 @@ export default {
 };
 ```
 
+Read-aloud voices: `ctx.audio.registerVoiceProvider` plugs a TTS engine
+into the reader's read-aloud — implement `listVoices()` and
+`synthesize({ text, voiceId })` returning encoded audio bytes (mp3/wav);
+the app owns playback, sentence pacing, prefetch, and system-voice
+fallback. Pair it with `service:network` for cloud or local engines and
+`ctx.secrets` for API keys — see the first-party `tts` plugin.
+
 UI is declarative only — view kinds `markdown`, `list`, `form`, and the
 compositional `blocks`, rendered by the app's design system. A list item or
 form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
