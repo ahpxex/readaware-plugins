@@ -97,6 +97,10 @@ with their built `main.js` committed — use them as living examples.
   LEAST every `everyMinutes` while the app is open and catches up shortly
   after launch when overdue — never at exact times, and never while the
   app is closed.
+- `minAppVersion` — bump it when you use a recently added capability
+  (`secret`/`visibleWhen`/`dynamicOptions` fields, localized field copy,
+  schedules, voice providers): an older app rejects the unknown manifest
+  shapes with a readable error instead of half-working.
 
 ## Themes and bundled fonts (`ui:themes`)
 
