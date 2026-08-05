@@ -195,8 +195,12 @@ Read-aloud voices: `ctx.audio.registerVoiceProvider` plugs a TTS engine
 into the reader's read-aloud — implement `listVoices()` and
 `synthesize({ text, voiceId })` returning encoded audio bytes (mp3/wav);
 the app owns playback, sentence pacing, prefetch, and system-voice
-fallback. Pair it with `service:network` for cloud or local engines and
-`ctx.secrets` for API keys — see the first-party `tts` plugin.
+fallback. A registered voice is adopted AUTOMATICALLY (first provider
+with voices wins; no host-side picker), so gate `listVoices` behind an
+explicit opt-in setting — return `[]` until the user flips it — or an
+unconfigured install will capture read-aloud. Pair it with
+`service:network` for cloud or local engines and `ctx.secrets` for API
+keys — see the first-party `tts` plugin.
 
 UI is declarative only — view kinds `markdown`, `list`, `form`, and the
 compositional `blocks`, rendered by the app's design system. A list item or
