@@ -72,8 +72,8 @@ export interface DictionaryEntrySnapshot {
  * - `service:*` — platform and AI services (network, one-shot LLM,
  *   clipboard).
  *
- * Namespaced storage, UI contributions, session events, the app locale, and
- * ambient reader control are not permissions — every plugin has them.
+ * Namespaced storage, UI contributions, session events, and ambient reader
+ * control are not permissions — every plugin has them.
  */
 export type PluginPermission =
   | "ui:themes"
@@ -102,8 +102,8 @@ export type PluginManifest = {
   /** Entry module relative to the plugin folder. Defaults to "main.js". */
   main?: string;
   /**
-   * Declarative settings: rendered by the app from the Plugins panel; values
-   * persist as one object under the plugin's storage key `settings`
+   * Declarative settings: rendered by the app from the Plugins panel; edits
+   * write through as one object under the plugin's storage key `settings`
    * (read with `ctx.storage.get("settings")`).
    */
   settings?: PluginFormField[];
@@ -111,8 +111,8 @@ export type PluginManifest = {
    * Declarative schedules (shown at install and in the Plugins panel). The
    * host runs each one AT LEAST every `everyMinutes` while the app is open,
    * with a catch-up run at launch when overdue — never an exact-time
-   * guarantee, and nothing runs while the app is closed. Bind the work at
-   * activate() via `ctx.schedule.on(id, run)`.
+   * guarantee, and nothing runs while the app is closed. The plugin binds
+   * the actual work at activate() via `ctx.schedule.on(id, run)`.
    */
   schedules?: PluginScheduleDeclaration[];
   /**
@@ -120,19 +120,57 @@ export type PluginManifest = {
    * they appear alongside the built-in choices in Settings → Appearance
    * (app part) and the reader's page-color control (reader part), and apply
    * only when the user selects them. Purely data — the host generates and
-   * injects all CSS. Apps without theme support reject the `ui:themes`
-   * permission at install, so set `minAppVersion` to the first app version
-   * that has it.
+   * injects all CSS.
    */
   themes?: PluginThemeContribution[];
   /**
    * Font faces bundled with the plugin (`ui:themes`), served from the plugin
    * folder. Each becomes a `plugin:<pluginId>:<fontId>` entry in the reader's
    * font picker; a theme's typography defaults may reference its own fonts
-   * as `plugin:<fontId>`. Every declared file must also be listed in the
-   * registry entry's `files` so installs fetch it.
+   * as `plugin:<fontId>`.
    */
   fonts?: PluginFontContribution[];
+};
+
+// ─── Voice providers (read-aloud) ────────────────────────────────────────────
+
+/** One selectable voice a provider offers. */
+export type PluginVoice = {
+  /** Unique within the provider. */
+  id: string;
+  label: PluginText;
+  /** BCP-47 tags this voice speaks well — informational, shown in pickers. */
+  languages?: string[];
+};
+
+/**
+ * A text-to-speech engine for the reader's read-aloud. The plugin only turns
+ * text into ENCODED AUDIO BYTES (mp3/wav/ogg — anything the webview can
+ * decode); the host owns playback, sentence pacing, prefetch, and the
+ * follow-along highlight, and falls back to the system voice when a call
+ * fails. Voices are listed once at registration and re-listed when the
+ * plugin's settings change.
+ */
+export type PluginVoiceProvider = {
+  id: string;
+  /** Provider name shown alongside its voices in the voice picker. */
+  label: PluginText;
+  listVoices(): PluginVoice[] | Promise<PluginVoice[]>;
+  synthesize(input: {
+    text: string;
+    voiceId: string;
+  }): Promise<ArrayBuffer | Uint8Array>;
+};
+
+// ─── Schedule declarations ───────────────────────────────────────────────────
+
+export type PluginScheduleDeclaration = {
+  /** Unique within the plugin: lowercase letters, digits, hyphens. */
+  id: string;
+  /** Shown at install time and in the Plugins panel. */
+  label: string;
+  /** Cadence in minutes, floored at 15. */
+  everyMinutes: number;
 };
 
 // ─── Theme contributions (`ui:themes`) ───────────────────────────────────────
@@ -290,18 +328,6 @@ export type PluginFontContribution = {
   files: PluginFontFile[];
 };
 
-export type PluginLocalizedText = {
-  default: string;
-  translations?: Record<string, string>;
-};
-
-/**
- * User-visible copy a contribution carries: a plain string, or a localized
- * bundle resolved against the app locale (exact tag, then base language,
- * then `default`). Contribution titles and tool labels accept this shape.
- */
-export type PluginText = string | PluginLocalizedText;
-
 /** Returned by every `register*`/`on` call; disposing removes the contribution. */
 export type PluginDisposable = { dispose: () => void };
 
@@ -313,13 +339,36 @@ export type PluginMarkdownView = {
   markdown: string;
 };
 
+/** An app-rendered action. Plugins provide behavior and content, never UI. */
+export type PluginAction = {
+  id: string;
+  label: string;
+  /** Icon name from the curated Phosphor set. */
+  icon?: string;
+  variant?: "solid" | "outline" | "ghost" | "danger";
+  run: () => PluginViewResult | Promise<PluginViewResult>;
+};
+
+export type PluginListAccessory =
+  | { kind: "text"; text: string }
+  | { kind: "tag"; text: string }
+  | { kind: "icon"; icon: string; label?: string };
+
 export type PluginListItem = {
   id: string;
   title: string;
   subtitle?: string;
+  /** ISO timestamp used by the host timeline, never formatted by the plugin. */
+  timestamp?: string;
   /** Icon name from the curated Phosphor set. */
   icon?: string;
-  /** Optional drill-down: return `{ view }` to push a detail view. */
+  /** Additional terms used by the host's built-in filtering. */
+  keywords?: string[];
+  /** Quiet, host-rendered values at the trailing edge of the item. */
+  accessories?: PluginListAccessory[];
+  /** Open returned views in-place or in a host-owned modal Dialog. */
+  presentation?: "push" | "dialog";
+  /** Optional drill-down: return `{ view }` for the selected item. */
   onSelect?: () => PluginViewResult | Promise<PluginViewResult>;
 };
 
@@ -327,58 +376,42 @@ export type PluginListView = {
   kind: "list";
   title?: string;
   items: PluginListItem[];
+  /** Host-rendered list-level actions; timelines place them after the tabs. */
+  actions?: PluginAction[];
   /** Shown when `items` is empty. */
   emptyText?: string;
-};
-
-/** One selectable voice a provider offers. */
-export type PluginVoice = {
-  /** Unique within the provider. */
-  id: string;
-  label: PluginText;
-  /** BCP-47 tags this voice speaks well — informational, shown in pickers. */
-  languages?: string[];
+  /** Adds host-rendered local filtering over title, subtitle, and keywords. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  /**
+   * Sort and group items by `timestamp`, with host-owned Today / This week /
+   * This month / All tabs. Search is debounced by the host.
+   */
+  timeline?: boolean;
 };
 
 /**
- * A text-to-speech engine for the reader's read-aloud. The plugin only turns
- * text into ENCODED AUDIO BYTES (mp3/wav/ogg); the host owns playback,
- * sentence pacing, prefetch, and the follow-along highlight, and falls back
- * to the system voice when a call fails. Voices are listed at registration
- * and re-listed when the plugin's settings change.
+ * Shared field attributes. `agentHidden` keeps a declared setting out of the
+ * reading agent's settings catalog (the Plugins panel still shows it); text
+ * fields with `inputMode: "password"` are agent-hidden automatically — and
+ * real credentials belong in `ctx.secrets`, not in settings at all.
+ *
+ * `visibleWhen` renders the field only while another field of the same form
+ * holds one of the given values (compared as strings). Hidden fields keep
+ * their stored values — this is how one settings object carries a value set
+ * per variant (e.g. one voice per TTS provider) without the variants
+ * overwriting each other.
  */
-export type PluginVoiceProvider = {
-  id: string;
-  /** Provider name shown alongside its voices in the voice picker. */
-  label: PluginText;
-  listVoices(): PluginVoice[] | Promise<PluginVoice[]>;
-  synthesize(input: {
-    text: string;
-    voiceId: string;
-  }): Promise<ArrayBuffer | Uint8Array>;
+type PluginFormFieldBase = {
+  agentHidden?: boolean;
+  visibleWhen?: { field: string; equals: string | string[] };
 };
 
-/** The floor the host clamps `everyMinutes` to. */
-export declare const MIN_SCHEDULE_MINUTES = 15;
+/** One option of a select/choice field. */
+export type PluginSelectOption = { value: string; label: string };
 
-export type PluginScheduleDeclaration = {
-  /** Unique within the plugin: lowercase letters, digits, hyphens. */
-  id: string;
-  /** Shown at install time and in the Plugins panel. */
-  label: string;
-  /** Cadence in minutes, floored at MIN_SCHEDULE_MINUTES. */
-  everyMinutes: number;
-};
-
-/** `agentHidden` keeps a declared setting out of the reading agent's settings
- *  catalog (the Plugins panel still shows it); `inputMode: "password"` text
- *  fields are agent-hidden automatically. Real credentials belong in
- *  `ctx.secrets`, not in settings. */
-/** `agentHidden` keeps a declared setting out of the reading agent's settings
- *  catalog (the Plugins panel still shows it); `inputMode: "password"` text
- *  fields are agent-hidden automatically. Real credentials belong in
- *  `ctx.secrets`, not in settings. */
-export type PluginFormField = { agentHidden?: boolean } & (
+export type PluginFormField = PluginFormFieldBase &
+  (
   | {
       kind: "text";
       id: string;
@@ -412,7 +445,38 @@ export type PluginFormField = { agentHidden?: boolean } & (
       id: string;
       label: string;
       value?: string;
-      options: { value: string; label: string }[];
+      /** Static options; may be empty when `dynamicOptions` is set. */
+      options: PluginSelectOption[];
+      helperText?: string;
+      /**
+       * Options resolved at runtime instead of listed in the declaration —
+       * for lists only the plugin can know (an account's voices, what a
+       * local endpoint serves). Declared settings bind the source via
+       * `ctx.settings.provideOptions`; a plugin-authored form view carries
+       * it as `resolveOptions`. While the source yields options the field
+       * renders as a select (the stored value is kept selectable even when
+       * the list no longer contains it); when it errors or yields none, the
+       * field falls back to a free text input — a listing failure must
+       * never lock the user out of typing the value.
+       */
+      dynamicOptions?: boolean;
+    }
+  | {
+      /**
+       * A credential field: host-rendered password input whose value lives in
+       * the ENCRYPTED secret store (`ctx.secrets`), never in the settings
+       * object, the KV, or the agent's settings catalog. `id` IS the secret
+       * key the plugin reads back (`ctx.secrets.get(id)`); lowercase letters,
+       * digits, `_`/`-`. The field shows configured/empty state and a clear
+       * affordance — it never echoes the stored value. Writes go through the
+       * form's `secrets` adapter: declared settings get it from the host; a
+       * plugin-authored form view may supply its own bound to `ctx.secrets`.
+       */
+      kind: "secret";
+      id: string;
+      label: string;
+      placeholder?: string;
+      helperText?: string;
     }
   | { kind: "toggle"; id: string; label: string; value?: boolean }
   | { kind: "checkbox"; id: string; label: string; description?: string; value?: boolean }
@@ -423,7 +487,7 @@ export type PluginFormField = { agentHidden?: boolean } & (
       value?: string;
       options: { value: string; label: string; icon?: string }[];
     }
-);
+  );
 
 export type PluginFormValues = Record<string, string | boolean | number>;
 
@@ -431,8 +495,35 @@ export type PluginFormView = {
   kind: "form";
   title?: string;
   fields: PluginFormField[];
+  /**
+   * `explicit` (default) renders a submit button. `change` writes through after
+   * each edit and omits that button, for forms that represent settings.
+   */
+  submitMode?: "explicit" | "change";
   submitLabel?: string;
   onSubmit: (values: PluginFormValues) => PluginViewResult | Promise<PluginViewResult>;
+  /**
+   * Option source for this form's `dynamicOptions` select fields. Called with
+   * the field's id and the form's CURRENT values (so a list may depend on a
+   * sibling field, e.g. an endpoint URL) when the field becomes visible and
+   * again when sibling values change. Declared settings forms get this wired
+   * by the host from `ctx.settings.provideOptions`.
+   */
+  resolveOptions?: (
+    fieldId: string,
+    values: PluginFormValues,
+  ) => PluginSelectOption[] | Promise<PluginSelectOption[]>;
+  /**
+   * Storage adapter for this form's `secret` fields, keyed by field id.
+   * Declared settings forms get one from the host, bound to the plugin's
+   * encrypted secret namespace; a plugin-authored form may wire its own from
+   * `ctx.secrets`. Secret fields render disabled without an adapter.
+   */
+  secrets?: {
+    has(id: string): boolean | Promise<boolean>;
+    set(id: string, value: string): void | Promise<void>;
+    remove(id: string): void | Promise<void>;
+  };
 };
 
 /**
@@ -447,38 +538,109 @@ export type PluginBlocksView = {
   blocks: PluginBlock[];
 };
 
+/**
+ * A compact host-rendered control for a detail surface. Plugins declare the
+ * options and behavior; the app owns the actual menu, focus behavior, and
+ * visual treatment.
+ */
+export type PluginSelectControl = {
+  kind: "select";
+  id: string;
+  label: string;
+  value: string;
+  icon?: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => PluginViewResult | Promise<PluginViewResult>;
+};
+
+export type PluginDetailControl = PluginSelectControl;
+
+/** Host detail: primary content, contextual controls, actions, and metadata. */
+export type PluginDetailView = {
+  kind: "detail";
+  title?: string;
+  content: PluginBlock[];
+  metadata?: PluginMetadataItem[];
+  controls?: PluginDetailControl[];
+  actions?: PluginAction[];
+};
+
+export type PluginMetadataItem =
+  | { kind: "label"; label: string; value: string; icon?: string }
+  | { kind: "tags"; label: string; values: string[] }
+  | { kind: "divider" };
+
+export type PluginLayoutGap = "tight" | "normal" | "relaxed";
+
 export type PluginBlock =
   | { kind: "markdown"; markdown: string }
+  /** Host typography; plugins choose semantic emphasis, never classes. */
+  | {
+      kind: "text";
+      text: string;
+      variant?: "body" | "caption" | "eyebrow" | "heading";
+      tone?: "default" | "muted" | "subtle";
+    }
   /** A section header: quiet eyebrow caption over an optional line of text. */
   | { kind: "heading"; text: string; caption?: string }
   /** A dictionary entry, rendered with the app's own dictionary UX. */
   | { kind: "dictionary"; entry: PluginDictionaryEntry }
   /** Label/value rows (provenance, metadata) in a quiet definition list. */
-  | { kind: "keyValue"; rows: { label: string; value: string }[] }
+  | {
+      kind: "keyValue";
+      rows: { label: string; value: string }[];
+      layout?: "stacked" | "inline";
+      columns?: 1 | 2 | 3;
+    }
   /** A quoted passage with an optional attribution line. */
   | { kind: "quote"; text: string; caption?: string }
-  /** A row of buttons; each runs like any other contribution outcome. */
+  /** A row of host buttons; each runs like any other contribution outcome. */
+  | { kind: "actions"; actions: PluginAction[]; align?: "start" | "end" }
+  | { kind: "metric"; label: string; value: string; description?: string }
+  | { kind: "progress"; value: number; max?: number; label?: string; showValue?: boolean }
+  | { kind: "tags"; label?: string; values: string[] }
   | {
-      kind: "actions";
-      actions: {
-        id: string;
-        label: string;
-        icon?: string;
-        variant?: "solid" | "outline" | "ghost" | "danger";
-        run: () => PluginViewResult | Promise<PluginViewResult>;
-      }[];
+      kind: "alert";
+      title?: string;
+      message: string;
+      variant?: "default" | "destructive" | "success";
     }
   | { kind: "divider" }
+  /** A titled vertical group with design-system-owned hierarchy and spacing. */
+  | {
+      kind: "section";
+      title?: string;
+      description?: string;
+      blocks: PluginBlock[];
+      gap?: PluginLayoutGap;
+    }
+  /** A vertical group for composing blocks without introducing raw layout. */
+  | { kind: "group"; blocks: PluginBlock[]; gap?: PluginLayoutGap }
   /**
-   * A constrained horizontal layout — 2–4 cells side by side, each holding
-   * its own block, with relative `weight` (default 1) sizing the columns.
-   * The design system owns the gaps, alignment, and (below a narrow width)
-   * the collapse back into a vertical stack. Cells hold ordinary blocks; a
-   * cell's block may NOT itself be a `row` (one level deep).
+   * Responsive, host-owned columns. Plugins may choose relative weight,
+   * minimum-width preset, spacing, and vertical alignment; wrapping and exact
+   * CSS remain owned by the design system. Nesting is allowed to a bounded
+   * depth and is validated at runtime.
+   */
+  | {
+      kind: "columns";
+      cells: PluginColumnCell[];
+      gap?: PluginLayoutGap;
+      align?: "start" | "center" | "baseline" | "stretch";
+    }
+  /**
+   * Backward-compatible single-block columns. Prefer `columns`, whose cells
+   * may contain a composed block sequence.
    */
   | { kind: "row"; cells: PluginRowCell[]; align?: "start" | "center" | "baseline" }
   | PluginListView
   | PluginFormView;
+
+export type PluginColumnCell = {
+  weight?: number;
+  minWidth?: "compact" | "standard" | "wide";
+  blocks: PluginBlock[];
+};
 
 /** One column of a `row` block. */
 export type PluginRowCell = {
@@ -487,20 +649,23 @@ export type PluginRowCell = {
   block: PluginRowCellBlock;
 };
 
-/** Blocks allowed inside a row cell — every block kind except a nested row. */
-export type PluginRowCellBlock = Exclude<PluginBlock, { kind: "row" }>;
+/** Legacy row cells stay single-block; runtime validation bounds recursion. */
+export type PluginRowCellBlock = PluginBlock;
 
 export type PluginView =
   | PluginMarkdownView
   | PluginListView
   | PluginFormView
-  | PluginBlocksView;
+  | PluginBlocksView
+  | PluginDetailView;
 
 /**
  * What an action / list-select / form-submit may produce:
  * - `undefined` / `null` — nothing happens (surface stays as is);
  * - `{ toast }` — a transient notice;
  * - `{ view }` — open (or push onto) the surface with this view;
+ * - `{ view, navigation: "replace" | "reset" }` — replace the current view
+ *   or return the surface to a new root view;
  * - `{ close: true }` — dismiss the surface (composable with `toast`);
  * - `{ fieldErrors }` (from a form submit) — stay on the form and show the
  *   errors under their fields.
@@ -512,6 +677,7 @@ export type PluginViewResult =
   | {
       toast?: string;
       view?: PluginView;
+      navigation?: "push" | "replace" | "reset";
       close?: boolean;
       fieldErrors?: Record<string, string>;
     };
@@ -523,6 +689,8 @@ export type SelectionActionSource = "selection" | "annotation" | "navigator";
 
 export type SelectionActionInput = {
   text: string;
+  /** Surrounding passage when the reader can recover it. */
+  context?: string;
   /** CFI range of the selection/annotation, when the engine can anchor it. */
   cfiRange: string | null;
   chapterHref: string | null;
@@ -539,6 +707,10 @@ export type PluginSelectionAction = {
   id: string;
   title: PluginText;
   icon?: string;
+  /** Optional host semantic used by the matching keyboard command. */
+  role?: "lookup";
+  /** Opens the host Dialog immediately in a loading state before `run` resolves. */
+  presentation?: "dialog";
   run: (input: SelectionActionInput) => PluginViewResult | Promise<PluginViewResult>;
 };
 
@@ -563,6 +735,24 @@ export type PluginHeaderAction = {
   presentation?: "popup" | "page";
   view: (input: HeaderActionInput) => PluginView | Promise<PluginView>;
 };
+
+// ─── Localized copy ──────────────────────────────────────────────────────────
+
+/**
+ * Plugin-owned copy with an English/default fallback. Locale keys are BCP-47
+ * tags; the host resolves the active locale and always renders the result.
+ */
+export type PluginLocalizedText = {
+  default: string;
+  translations?: Record<string, string>;
+};
+
+/**
+ * User-visible copy a contribution carries: a plain string, or a localized
+ * bundle resolved against the app locale (exact tag, then base language,
+ * then `default`). Contribution titles and tool labels accept this shape.
+ */
+export type PluginText = string | PluginLocalizedText;
 
 /**
  * A key chord for a command's default binding. `mod` is the platform command
@@ -603,6 +793,12 @@ export type PluginToolDefinition = {
   /** Short human label shown in the chat's tool activity row. */
   label?: PluginText;
   description: string;
+  /**
+   * Agent surfaces where this tool is useful. Omit for both surfaces so older
+   * plugins keep their existing behavior; focused tools should opt into the
+   * narrowest useful set to avoid crowding the model's tool context.
+   */
+  contexts?: Array<"book" | "global">;
   parameters?: Record<string, unknown>;
   /**
    * Resolve with any JSON value — it is serialized as the tool result the
@@ -1077,12 +1273,23 @@ export type PluginStorage = {
   remove(key: string): void;
   /**
    * A named document collection — structured plugin-private data one tier
-   * above the KV (queryable, per-document, optionally book-anchored).
-   * Lifecycle belongs to the plugin (uninstall clears it). `bookId`/`anchor`
-   * are provenance INDEXES, not ownership — documents survive the referenced
-   * book's deletion.
+   * above the KV (queryable, per-document, optionally book-anchored). Backed
+   * by the app's local store; lifecycle belongs to the plugin (uninstall
+   * clears it). `bookId`/`anchor` are provenance INDEXES, not ownership —
+   * documents survive the referenced book's deletion.
    */
   collection(name: string): PluginDocumentCollection;
+};
+
+export type PluginExportFile = {
+  /** Suggested basename shown by the host save dialog. */
+  filename: string;
+  /**
+   * UTF-8 text (CSV, JSON, Markdown, …) or raw bytes for binary formats
+   * (.apkg, images, EPUB, …).
+   */
+  content: string | Uint8Array | ArrayBuffer;
+  mimeType?: string;
 };
 
 export type PluginDocument<T = unknown> = {
@@ -1139,22 +1346,39 @@ export type PluginContext = {
     registerHeaderAction(action: PluginHeaderAction): PluginDisposable;
     registerCommand(command: PluginCommand): PluginDisposable;
     showToast(message: string): void;
-    /** Host save flow for a plugin-generated file. Resolves false on cancel. */
-    exportFile(file: {
-      /** Suggested basename shown by the host save dialog. */
-      filename: string;
-      /** UTF-8 text, or raw bytes for binary formats (.apkg, images, …). */
-      content: string | Uint8Array | ArrayBuffer;
-      mimeType?: string;
-    }): Promise<boolean>;
+    /** Open the host save flow for a plugin-generated text file. False means cancelled. */
+    exportFile(file: PluginExportFile): Promise<boolean>;
   };
   /**
    * Bind the work for a schedule declared in `manifest.schedules`. The host
-   * owns all timing; overlapping runs of one schedule are skipped, and a
-   * failed run waits for the next cadence. Binding an undeclared id throws.
+   * owns all timing (see the manifest field's contract); overlapping runs of
+   * one schedule are skipped, and a failed run simply waits for the next
+   * cadence. Binding an undeclared id throws.
    */
   schedule: {
     on(scheduleId: string, run: () => void | Promise<void>): PluginDisposable;
+  };
+  /**
+   * Bindings for `manifest.settings`. Like `schedule.on`, the manifest
+   * declares the shape and activate() supplies the behavior the declaration
+   * cannot carry.
+   */
+  settings: {
+    /**
+     * Provide the options of a declared select field marked
+     * `dynamicOptions: true` (binding any other field throws). Called with
+     * the settings form's current values; return the selectable options, or
+     * an empty list when they cannot be known (no credentials yet,
+     * unreachable endpoint) — the host then falls back to free text input
+     * for the field. Failures count as empty; never let a listing error
+     * take the setting hostage.
+     */
+    provideOptions(
+      fieldId: string,
+      provider: (
+        values: PluginFormValues,
+      ) => PluginSelectOption[] | Promise<PluginSelectOption[]>,
+    ): PluginDisposable;
   };
   /**
    * Read-aloud voice providers. Registration is permission-free — a provider
@@ -1191,7 +1415,7 @@ export type PluginContext = {
   agent?: {
     registerTool(tool: PluginToolDefinition): PluginDisposable;
   };
-  /** `service:network` — the Rust HTTP client: no CORS; https + localhost scope. */
+  /** `service:network` (CSP allows https; gating is at the API layer). */
   network?: {
     fetch(input: string | URL | Request, init?: RequestInit): Promise<Response>;
   };
@@ -1204,6 +1428,10 @@ export type PluginContext = {
    * runs structured mode: it instructs the model to answer with JSON only,
    * parses and validates the reply, retries once with the violation list, and
    * resolves with the parsed object — the plugin never sees raw model text.
+   *
+   * With `onText` the reply streams: the callback receives text deltas as
+   * they arrive and the promise still resolves with the full text. Streaming
+   * and `schema` are mutually exclusive.
    */
   llm?: {
     ask(input: {

@@ -71,15 +71,24 @@ with their built `main.js` committed — use them as living examples.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
 - `settings` — optional declarative settings (field kinds: `text`,
-  `textarea`, `number`, `select`, `toggle`, `checkbox`, `choice`). The app
-  renders them in **Settings → Plugins** and persists the values as ONE
-  object under your storage key `settings` — read them with
-  `ctx.storage.get("settings")`, and re-read on the storage-changed
-  notification if you cache them. The reading agent can view and change
-  these settings too, so users can just ask it ("set the article limit
-  to 50"); fields with `inputMode: "password"` or `agentHidden: true`
-  stay out of the agent's sight. Real credentials belong in
-  `ctx.secrets`, never in settings.
+  `textarea`, `number`, `select`, `toggle`, `checkbox`, `choice`,
+  `secret`). The app renders them as the plugin's own section in Settings
+  and persists the values as ONE object under your storage key `settings`
+  — read them with `ctx.storage.get("settings")`, and re-read on the
+  storage-changed notification if you cache them. Fields can show
+  conditionally per variant (`visibleWhen: { field, equals }` — hidden
+  fields keep their stored values, so one settings object carries a value
+  set per variant), and a `select` may resolve its options at runtime:
+  declare `dynamicOptions: true` and bind the source in `activate` with
+  `ctx.settings.provideOptions(fieldId, async (values) => [...])` — when
+  the source yields nothing the field falls back to free text input.
+  Credentials use `kind: "secret"`: a host-rendered password input whose
+  value goes to the encrypted secret store (the field id IS the
+  `ctx.secrets` key your code reads back), never into plain settings.
+  The reading agent can view and change ordinary settings too, so users
+  can just ask it ("set the article limit to 50"); `secret` fields,
+  password-mode text fields, and `agentHidden: true` stay out of the
+  agent's sight.
 - `schedules` — optional recurring tasks, e.g.
   `[{ "id": "refresh", "label": "Refresh feeds", "everyMinutes": 60 }]`
   (floor: 15 minutes). Declared here so users see them before installing;
@@ -195,12 +204,12 @@ Read-aloud voices: `ctx.audio.registerVoiceProvider` plugs a TTS engine
 into the reader's read-aloud — implement `listVoices()` and
 `synthesize({ text, voiceId })` returning encoded audio bytes (mp3/wav);
 the app owns playback, sentence pacing, prefetch, and system-voice
-fallback. A registered voice is adopted AUTOMATICALLY (first provider
-with voices wins; no host-side picker), so gate `listVoices` behind an
-explicit opt-in setting — return `[]` until the user flips it — or an
-unconfigured install will capture read-aloud. Pair it with
-`service:network` for cloud or local engines and `ctx.secrets` for API
-keys — see the first-party `tts` plugin.
+fallback. A registered voice is adopted automatically (first provider
+with voices wins; no host-side picker): the user enabling your plugin IS
+the opt-in, and a failed synthesis call falls back to the system voice —
+so registering unconditionally is fine. Pair it with `service:network`
+for cloud or local engines and `secret` settings fields (read back via
+`ctx.secrets`) for API keys — see the first-party `tts` plugin.
 
 UI is declarative only — view kinds `markdown`, `list`, `form`, and the
 compositional `blocks`, rendered by the app's design system. A list item or
