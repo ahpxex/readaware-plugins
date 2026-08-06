@@ -30,8 +30,11 @@ accepted if you prefer it.
 Updates are the same flow: bump `version` in both `manifest.json` and
 `registry.json` in one PR.
 
-The official plugins are authored in TypeScript (`plugins/*/src/`)
-with their built `main.js` committed — use them as living examples.
+Start from `template/` — a commented TypeScript skeleton with the build
+script wired up (`bun run build` emits `main.js`). The bundled first-party
+plugins in the app repository (`plugins/` there: dictionary, rss-reader,
+tts, sentence-reader, editorial-themes) are the living examples of the
+full surface.
 
 ## manifest.json
 

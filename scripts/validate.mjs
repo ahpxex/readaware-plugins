@@ -265,7 +265,9 @@ for (const entry of registry.plugins) {
   );
 }
 
-for (const folder of readdirSync(join(ROOT, "plugins"))) {
+const pluginsDir = join(ROOT, "plugins");
+for (const folder of existsSync(pluginsDir) ? readdirSync(pluginsDir) : []) {
+  if (folder.startsWith(".")) continue;
   if (folder.startsWith(".")) continue;
   if (!seen.has(folder)) {
     problem(`plugins/${folder}/ exists but is not listed in registry.json`);

@@ -5,6 +5,22 @@
   "minAppVersion": "0.3.0",
   "description": "One sentence about what it does.",
   "author": "you",
-  "permissions": [],
-  "main": "main.js"
+  "permissions": [
+    "shelf:read"
+  ],
+  "main": "main.js",
+  "settings": [
+    {
+      "kind": "text",
+      "id": "greeting",
+      "label": {
+        "default": "Greeting",
+        "translations": {
+          "zh-Hans": "问候语"
+        }
+      },
+      "value": "Hello",
+      "helperText": "Shown by the hello command — labels accept localized bundles."
+    }
+  ]
 }
