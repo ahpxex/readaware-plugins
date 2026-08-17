@@ -22,17 +22,41 @@
  *    tool mount (`agent:tools`) are separate permission families.
  * 3. **Origin on every write.** Plugin writes are stamped
  *    `plugin:<id>` in the event log — auditable, compensatable.
- * 4. **Device-local state and presentation stay closed.** View preferences,
+ * 4. **Device-local state and presentation stay host-owned.** View preferences,
  *    reader appearance, layouts, sync internals are not plugin surface; UI is
- *    declared with the constrained view vocabulary below (markdown / list /
- *    form / blocks) and rendered by the app's design system — plugin surfaces
- *    always look native. Plugins never render JSX or HTML.
+ *    declared as a host component tree (markdown / list / form / detail /
+ *    compositional blocks) and rendered by the app's design system. Layout is
+ *    expressed through bounded Stack/Section/Columns semantics, never CSS.
+ *    Plugins never render JSX or HTML, and declarations are validated again
+ *    at runtime before React sees them. Reader-mode plugins supply plain-text
+ *    offset segmentation only; DOM, engine objects, input, and controls stay
+ *    inside the host.
+ *
+ *    The one deliberate opening in this rule is themes (`ui:themes`): a plugin
+ *    may DECLARE appearance data — named palettes over the host's fixed token
+ *    vocabulary, plus bundled font faces — in its manifest. The data is
+ *    validated against strict color/path grammars, the CSS is generated and
+ *    injected by the host, and nothing applies until the user selects the
+ *    theme in Settings. Plugins still never hand the host a stylesheet.
  */
 
 // ─── Inlined @read-aware/core vocabulary ─────────────────────────────────────
 
-/** "virtual" marks a plugin-provided book: content served by a provider. */
-export type BookFormat = "epub" | "mobi" | "azw3" | "fb2" | "pdf" | "virtual";
+/**
+ * "virtual" marks a plugin-provided book: no imported file, content served by
+ * a registered content provider at open time.
+ */
+export type BookFormat =
+  | "epub"
+  | "mobi"
+  | "azw3"
+  | "fb2"
+  | "cbz"
+  | "cbr"
+  | "txt"
+  | "html"
+  | "pdf"
+  | "virtual";
 
 export type ReadingStatus = "unread" | "reading" | "finished";
 
@@ -64,6 +88,7 @@ export interface DictionaryEntrySnapshot {
  * - `<domain>:read` / `<domain>:write` — data access per domain; write
  *   implies the domain's read surface. `shelf` covers the whole of library
  *   management: books (incl. content reads), collections, and reading stats.
+ * - `reader:modes` — privileged host-rendered reader-mode registration.
  * - `ui:themes` — declare app/reader themes and bundled fonts in the
  *   manifest. The only UI contribution that needs a permission: unlike
  *   actions and commands it has visual authority over the whole app, so the
@@ -76,6 +101,7 @@ export interface DictionaryEntrySnapshot {
  * control are not permissions — every plugin has them.
  */
 export type PluginPermission =
+  | "reader:modes"
   | "ui:themes"
   | "shelf:read"
   | "shelf:write"
@@ -201,8 +227,6 @@ export type PluginThemeColor = string;
 export type PluginAppThemeTokens = {
   /** The app canvas. */
   paper?: PluginThemeColor;
-  /** The warmer secondary canvas tint. */
-  paperWarm?: PluginThemeColor;
   /** Hairline borders. */
   border?: PluginThemeColor;
   /** Primary text. */
@@ -485,7 +509,13 @@ export type PluginFormField = PluginFormFieldBase &
       placeholder?: PluginText;
       helperText?: PluginText;
     }
-  | { kind: "toggle"; id: string; label: PluginText; value?: boolean }
+  | {
+      kind: "toggle";
+      id: string;
+      label: PluginText;
+      description?: PluginText;
+      value?: boolean;
+    }
   | {
       kind: "checkbox";
       id: string;
@@ -749,7 +779,7 @@ export type PluginHeaderAction = {
   view: (input: HeaderActionInput) => PluginView | Promise<PluginView>;
 };
 
-// ─── Localized copy ──────────────────────────────────────────────────────────
+// ─── Reader-mode contributions ──────────────────────────────────────────────
 
 /**
  * Plugin-owned copy with an English/default fallback. Locale keys are BCP-47
@@ -766,6 +796,86 @@ export type PluginLocalizedText = {
  * then `default`). Contribution titles and tool labels accept this shape.
  */
 export type PluginText = string | PluginLocalizedText;
+
+/** One semantic step size declared by a text-unit reader mode. */
+export type PluginReaderTextUnit = {
+  id: string;
+  /** Label used by the host's settings control. */
+  label: PluginLocalizedText;
+  previousLabel: PluginLocalizedText;
+  nextLabel: PluginLocalizedText;
+  /** Label for the host-rendered quick toggle. Defaults to `label`. */
+  toggleLabel?: PluginLocalizedText;
+  /** Curated host icon name. Plugins cannot supply SVG or UI code. */
+  icon?: string;
+};
+
+/**
+ * Copy for every host-rendered surface belonging to the mode.
+ *
+ * Behavior settings (step unit, tap-to-advance, …) are NOT copy: the plugin
+ * declares them as ordinary `manifest.settings` fields under the well-known
+ * ids `unitId`, `tapToAdvance`, `scrollToStep`, `showProgress`,
+ * `sessionTimer`, and the host reads those values from the plugin's settings
+ * object. Its settings page is the one editing surface.
+ */
+export type PluginReaderModeCopy = {
+  title: PluginLocalizedText;
+  enable: PluginLocalizedText;
+  exit: PluginLocalizedText;
+  returnToCurrent: PluginLocalizedText;
+  showToolbars: PluginLocalizedText;
+  moreActions: PluginLocalizedText;
+  collapseActions: PluginLocalizedText;
+  menuLabel: PluginLocalizedText;
+  shortcuts: {
+    description: PluginLocalizedText;
+    volumeKeys: PluginLocalizedText;
+  };
+};
+
+/**
+ * One half-open span (`start <= offset < end`) inside a text block supplied by
+ * the reader host. The host maps offsets back to Foliate DOM Ranges; plugins
+ * never receive a Document, Range, iframe, or engine instance.
+ */
+export type PluginReaderTextSegment = {
+  start: number;
+  end: number;
+};
+
+export type PluginReaderTextSegmentInput = {
+  /** Plain text from one host-detected block in the current reflowable section. */
+  text: string;
+  /** The section document's language tag, when the book declares one. */
+  language?: string;
+  /** One of the registering mode's declared `units[].id` values. */
+  unitId: string;
+};
+
+/**
+ * A guided reader mode over host-owned text units. The plugin supplies unit
+ * semantics, localized copy, curated icon names, and segmentation policy;
+ * ReadAware owns section traversal, CFI mapping, overlays, input capture,
+ * persistence, actions, settings, and every rendered control.
+ *
+ * `reader:modes` is currently reserved for bundled first-party plugins while
+ * this privileged lifecycle contract settles.
+ */
+export type PluginReaderMode = {
+  id: string;
+  kind: "text-unit-navigator";
+  /** Curated host icon used for the reader-header entry. */
+  icon?: string;
+  /** Semantic units exposed through host-owned settings and controls. */
+  units: PluginReaderTextUnit[];
+  defaultUnitId: string;
+  copy: PluginReaderModeCopy;
+  /** Segment one block. Results must be ordered, non-overlapping spans. */
+  segmentText(
+    input: PluginReaderTextSegmentInput,
+  ): PluginReaderTextSegment[];
+};
 
 /**
  * A key chord for a command's default binding. `mod` is the platform command
@@ -861,6 +971,8 @@ export type PluginDomainEventPayloadMap = {
   };
   "book.metadataEdited": { bookId: string; title?: string; author?: string };
   "book.coverExtracted": { bookId: string; status: CoverStatus; coverBlobKey?: string };
+  /** Duplicate-content merge: `mergedId`'s traces were folded into `keepId`. */
+  "book.merged": { keepId: string; mergedId: string };
   "book.opened": { bookId: string };
   "book.starred": { bookId: string; starred: boolean };
   /** The reader's own "I finished this" verdict; distinct from reaching 100%. */
@@ -977,6 +1089,7 @@ export type ShelfDomainEventType =
   | "book.imported"
   | "book.metadataEdited"
   | "book.coverExtracted"
+  | "book.merged"
   | "book.opened"
   | "book.starred"
   | "book.finished"
@@ -1022,6 +1135,11 @@ export type PluginSessionEventMap = {
 export type PluginSessionEventName = keyof PluginSessionEventMap;
 
 // ─── Read models (projections as plugins see them) ───────────────────────────
+//
+// These are the CANONICAL domain read models from @read-aware/core
+// (read-models.ts) — inlined here under this contract's public names — the
+// same shapes the app's own surfaces and the agent's ports consume, so the
+// three actors cannot drift apart.
 
 export type PluginBook = {
   id: string;
@@ -1117,13 +1235,12 @@ export type PluginStatsOverview = {
 };
 
 /**
- * A structured dictionary entry — the shape the `dictionary` view block and
+ * A structured dictionary entry — the shape the `dictionary` view kind and
  * word-card tool results render with the app's own dictionary UX. Producing
  * entries is plugin business (e.g. via `llm.ask` with a schema); this is the
  * presentation contract.
  */
 export type PluginDictionaryEntry = DictionaryEntrySnapshot;
-
 
 export type PluginChatMessage = {
   id: string;
@@ -1410,6 +1527,10 @@ export type PluginContext = {
   reader: {
     openBook(bookId: string): void;
     goTo(target: { bookId?: string; cfi?: string; href?: string }): void;
+    /** `reader:modes` — bundled plugins may register a host-rendered reader mode. */
+    modes?: {
+      register(mode: PluginReaderMode): PluginDisposable;
+    };
   };
   /** Session facts of the open reader (ambient, permission-free). */
   session: {
