@@ -21,6 +21,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const KNOWN_PERMISSIONS = new Set([
   "ui:themes",
+  "ui:appearance",
   "shelf:read",
   "shelf:write",
   "annotations:read",

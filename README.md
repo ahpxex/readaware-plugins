@@ -31,10 +31,10 @@ Updates are the same flow: bump `version` in both `manifest.json` and
 `registry.json` in one PR.
 
 Start from `template/` — a commented TypeScript skeleton with the build
-script wired up (`bun run build` emits `main.js`). The bundled first-party
-plugins in the app repository (`plugins/` there: dictionary, rss-reader,
-tts, sentence-reader, editorial-themes) are the living examples of the
-full surface.
+script wired up (`bun run build` emits `main.js`). `plugins/theme-schedule/` here, and the bundled
+first-party plugins in the app repository (`plugins/` there: dictionary,
+rss-reader, tts, sentence-reader, editorial-themes), are the living examples
+of the full surface.
 
 ## manifest.json
 
@@ -69,13 +69,16 @@ full surface.
   `shelf` (books incl. chapter text, collections, and reading stats),
   `annotations`, `conversations` (read-only). `agent:tools` registers tools
   on the reading agent; `ui:themes` unlocks the declarative `themes`/`fonts`
-  fields below; services are `service:network`, `service:llm`
+  fields below; `ui:appearance` unlocks `ctx.appearance` (see below);
+  services are `service:network`, `service:llm`
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
 - `settings` — optional declarative settings (field kinds: `text`,
-  `textarea`, `number`, `select`, `toggle`, `checkbox`, `choice`,
-  `secret`). The app renders them as the plugin's own section in Settings
+  `textarea`, `number`, `time`, `select`, `toggle`, `checkbox`, `choice`,
+  `secret`). A `time` field is a time of day: the app renders two dropdowns
+  (hours, minutes, `minuteStep` granularity) and stores 24-hour `HH:MM` —
+  never ask users to type a time. The app renders them as the plugin's own section in Settings
   and persists the values as ONE object under your storage key `settings`
   — read them with `ctx.storage.get("settings")`, and re-read on the
   storage-changed notification if you cache them. Fields can show
@@ -84,7 +87,11 @@ full surface.
   set per variant), and a `select` may resolve its options at runtime:
   declare `dynamicOptions: true` and bind the source in `activate` with
   `ctx.settings.provideOptions(fieldId, async (values) => [...])` — when
-  the source yields nothing the field falls back to free text input.
+  the source yields nothing the field falls back to free text input. Add
+  `allowManualEntry: false` when the resolved list is the WHOLE set of
+  acceptable values (a theme, an installed font): the "Enter manually…"
+  escape and the text fallback are dropped, because typing a value the
+  write path will reject helps nobody.
   Credentials use `kind: "secret"`: a host-rendered password input whose
   value goes to the encrypted secret store (the field id IS the
   `ctx.secrets` key your code reads back), never into plain settings.
@@ -158,6 +165,42 @@ just `export default { activate() {} }`.
 - Set `minAppVersion` to the first app version with theme support — older
   apps reject the `ui:themes` permission at install.
 
+## Switching the appearance (`ui:appearance`)
+
+`ui:themes` says where a theme comes from; `ui:appearance` says when it
+applies. With it, `ctx.appearance` reads and changes the two preferences the
+app's own appearance controls write:
+
+```js
+const themes = await ctx.appearance.listThemes();
+// [{ value: "dark", label: "Dark", polarity: "dark", surfaces: ["app", "reader"] },
+//  { value: "plugin:editorial-themes:nocturne", label: "Nocturne",
+//    polarity: "dark", surfaces: ["reader"], pluginId: "editorial-themes", … }]
+
+const { app, reader } = await ctx.appearance.get();
+await ctx.appearance.setAppTheme("plugin:editorial-themes:nocturne");
+await ctx.appearance.setReaderTheme("warm");
+```
+
+- `listThemes()` returns everything both pickers offer — the built-ins
+  (app: `system`/`light`/`dark`; page: `auto`/`light`/`warm`/`dark`) plus
+  every theme any enabled plugin contributes — each with the `surfaces` it
+  may be set on, its `polarity` (null for `system`/`auto`), and a label
+  already resolved to the app's language. Build your options from this rather
+  than hard-coding the vocabulary.
+- The setters take exactly those values and reject anything else, including a
+  `plugin:` ref whose plugin is currently disabled.
+- A write is the user's own selection path: a plugin reader theme still
+  applies its typography preset, and a book pinned to its own appearance
+  keeps it.
+- It is a separate permission from `ui:themes` on purpose — offering a theme
+  is passive, switching one is not — and a theme pack should not ask for it.
+  Requires app **0.5.0** or newer; set `minAppVersion` accordingly.
+
+The first-party [`theme-schedule`](plugins/theme-schedule) plugin in this
+repository is a complete worked example: a daytime and a night look, each
+picking an app theme and a page color, switched on the device's own clock.
+
 ## Plugin API in one screen
 
 `main.js` default-exports a lifecycle object. Everything goes through the
@@ -223,7 +266,9 @@ compositional `blocks`, rendered by the app's design system. A list item or
 form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
 or `{ close: true }`. Icons are picked by name from the app's curated
 Phosphor set. Persistent state goes through `ctx.storage` (namespaced
-key-value).
+key-value; `ctx.storage.onChange(fn)` fires when your namespace is written
+from outside the plugin — its settings page, the agent — so cached settings
+can be re-read).
 
 The full contract is `types/plugin-api.d.ts` in this repository (a mirror of
 `packages/plugin-types` in the app repository).

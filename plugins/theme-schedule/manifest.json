@@ -1,0 +1,181 @@
+{
+  "id": "theme-schedule",
+  "name": "Theme Schedule",
+  "version": "1.0.0",
+  "minAppVersion": "0.5.0",
+  "description": "Switch the app theme and the book page color automatically: one look for daytime, another from the hour you call night.",
+  "author": "ReadAware",
+  "permissions": [
+    "ui:appearance"
+  ],
+  "main": "main.js",
+  "settings": [
+    {
+      "kind": "toggle",
+      "id": "enabled",
+      "label": {
+        "default": "Switch themes on a schedule",
+        "translations": {
+          "zh-Hans": "按时间自动切换主题",
+          "zh-Hant": "依時間自動切換主題",
+          "ja": "時刻でテーマを自動切り替え",
+          "ru": "Переключать темы по расписанию",
+          "fr": "Changer de thème selon l’horaire",
+          "de": "Themes nach Zeitplan wechseln",
+          "es": "Cambiar de tema según un horario"
+        }
+      },
+      "description": {
+        "default": "While this is off, nothing changes on its own.",
+        "translations": {
+          "zh-Hans": "关闭后，不会自动改变任何主题。",
+          "zh-Hant": "關閉後，不會自動改變任何主題。",
+          "ja": "オフのあいだは何も自動で変わりません。",
+          "ru": "Пока выключено, ничего не меняется само.",
+          "fr": "Désactivé, rien ne change tout seul.",
+          "de": "Ausgeschaltet ändert sich nichts von selbst.",
+          "es": "Si está desactivado, nada cambia por su cuenta."
+        }
+      },
+      "value": true
+    },
+    {
+      "kind": "time",
+      "id": "dayTime",
+      "label": {
+        "default": "Day starts at",
+        "translations": {
+          "zh-Hans": "白天开始于",
+          "zh-Hant": "白天開始於",
+          "ja": "昼の開始時刻",
+          "ru": "День начинается в",
+          "fr": "Le jour commence à",
+          "de": "Tag beginnt um",
+          "es": "El día empieza a las"
+        }
+      },
+      "value": "07:00",
+      "helperText": {
+        "default": "Runs until the night time below; the night one carries on past midnight.",
+        "translations": {
+          "zh-Hans": "持续到下面的夜间时刻为止；夜间那段跨过午夜。",
+          "zh-Hant": "持續到下面的夜間時刻為止；夜間那段跨過午夜。",
+          "ja": "下の夜の時刻まで続きます。夜のほうは深夜をまたぎます。",
+          "ru": "Длится до ночного времени ниже; ночной интервал переходит через полночь.",
+          "fr": "Dure jusqu’à l’heure de nuit ci-dessous ; la nuit passe minuit.",
+          "de": "Läuft bis zur Nachtzeit unten; die Nacht reicht über Mitternacht.",
+          "es": "Dura hasta la hora de noche de abajo; la noche cruza la medianoche."
+        }
+      }
+    },
+    {
+      "kind": "select",
+      "id": "dayApp",
+      "label": {
+        "default": "Daytime app theme",
+        "translations": {
+          "zh-Hans": "白天的应用主题",
+          "zh-Hant": "白天的應用程式主題",
+          "ja": "昼のアプリのテーマ",
+          "ru": "Дневная тема приложения",
+          "fr": "Thème de l’application, jour",
+          "de": "App-Theme am Tag",
+          "es": "Tema de la aplicación de día"
+        }
+      },
+      "value": "light",
+      "options": [],
+      "dynamicOptions": true,
+      "allowManualEntry": false
+    },
+    {
+      "kind": "select",
+      "id": "dayReader",
+      "label": {
+        "default": "Daytime page color",
+        "translations": {
+          "zh-Hans": "白天的阅读页配色",
+          "zh-Hant": "白天的閱讀頁配色",
+          "ja": "昼の本文ページの配色",
+          "ru": "Дневной цвет страницы",
+          "fr": "Couleur de page, jour",
+          "de": "Seitenfarbe am Tag",
+          "es": "Color de página de día"
+        }
+      },
+      "value": "warm",
+      "options": [],
+      "dynamicOptions": true,
+      "helperText": {
+        "default": "“Keep current” leaves that surface untouched.",
+        "translations": {
+          "zh-Hans": "选「保持不变」就不动这一面。",
+          "zh-Hant": "選「保持不變」就不動這一面。",
+          "ja": "「変更しない」を選ぶと、その面には手を触れません。",
+          "ru": "«Не менять» оставляет эту поверхность нетронутой.",
+          "fr": "« Ne rien changer » laisse cette surface intacte.",
+          "de": "„Unverändert lassen“ rührt diese Oberfläche nicht an.",
+          "es": "«Sin cambios» deja esa superficie intacta."
+        }
+      },
+      "allowManualEntry": false
+    },
+    {
+      "kind": "time",
+      "id": "nightTime",
+      "label": {
+        "default": "Night starts at",
+        "translations": {
+          "zh-Hans": "夜间开始于",
+          "zh-Hant": "夜間開始於",
+          "ja": "夜の開始時刻",
+          "ru": "Ночь начинается в",
+          "fr": "La nuit commence à",
+          "de": "Nacht beginnt um",
+          "es": "La noche empieza a las"
+        }
+      },
+      "value": "19:00"
+    },
+    {
+      "kind": "select",
+      "id": "nightApp",
+      "label": {
+        "default": "Night app theme",
+        "translations": {
+          "zh-Hans": "夜间的应用主题",
+          "zh-Hant": "夜間的應用程式主題",
+          "ja": "夜のアプリのテーマ",
+          "ru": "Ночная тема приложения",
+          "fr": "Thème de l’application, nuit",
+          "de": "App-Theme in der Nacht",
+          "es": "Tema de la aplicación de noche"
+        }
+      },
+      "value": "dark",
+      "options": [],
+      "dynamicOptions": true,
+      "allowManualEntry": false
+    },
+    {
+      "kind": "select",
+      "id": "nightReader",
+      "label": {
+        "default": "Night page color",
+        "translations": {
+          "zh-Hans": "夜间的阅读页配色",
+          "zh-Hant": "夜間的閱讀頁配色",
+          "ja": "夜の本文ページの配色",
+          "ru": "Ночной цвет страницы",
+          "fr": "Couleur de page, nuit",
+          "de": "Seitenfarbe in der Nacht",
+          "es": "Color de página de noche"
+        }
+      },
+      "value": "dark",
+      "options": [],
+      "dynamicOptions": true,
+      "allowManualEntry": false
+    }
+  ]
+}

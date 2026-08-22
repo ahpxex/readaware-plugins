@@ -1,3 +1,15 @@
 {
-  "plugins": []
+  "plugins": [
+    {
+      "id": "theme-schedule",
+      "name": "Theme Schedule",
+      "version": "1.0.0",
+      "description": "Switch the app theme and the book page color automatically: one look for daytime, another from the hour you call night.",
+      "author": "ReadAware",
+      "minAppVersion": "0.5.0",
+      "permissions": [
+        "ui:appearance"
+      ]
+    }
+  ]
 }
