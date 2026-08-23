@@ -66,11 +66,11 @@ of the full surface.
   folder name.
 - `permissions` — only what you use. Data permissions are
   `<domain>:read` / `<domain>:write` per domain (write implies read):
-  `shelf` (books incl. chapter text, collections, and reading stats),
-  `annotations`, `conversations` (read-only). `agent:tools` registers tools
+  `library` (books, source text, and collections), `reading` (navigation,
+  progress, and reading time), `annotations`, `conversations` (read-only).
+  `agent:tools` registers tools
   on the reading agent; `ui:themes` unlocks the declarative `themes`/`fonts`
-  fields below; `ui:appearance` unlocks `ctx.appearance` (see below);
-  services are `service:network`, `service:llm`
+  fields below; services are `service:network`, `service:llm`
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.
@@ -80,13 +80,13 @@ of the full surface.
   (hours, minutes, `minuteStep` granularity) and stores 24-hour `HH:MM` —
   never ask users to type a time. The app renders them as the plugin's own section in Settings
   and persists the values as ONE object under your storage key `settings`
-  — read them with `ctx.storage.get("settings")`, and re-read on the
+  — read them with `ctx.services.storage.get("settings")`, and re-read on the
   storage-changed notification if you cache them. Fields can show
   conditionally per variant (`visibleWhen: { field, equals }` — hidden
   fields keep their stored values, so one settings object carries a value
   set per variant), and a `select` may resolve its options at runtime:
   declare `dynamicOptions: true` and bind the source in `activate` with
-  `ctx.settings.provideOptions(fieldId, async (values) => [...])` — when
+  `ctx.contributions.settingsOptions.register(fieldId, async (values) => [...])` — when
   the source yields nothing the field falls back to free text input. Add
   `allowManualEntry: false` when the resolved list is the WHOLE set of
   acceptable values (a theme, an installed font): the "Enter manually…"
@@ -94,7 +94,7 @@ of the full surface.
   write path will reject helps nobody.
   Credentials use `kind: "secret"`: a host-rendered password input whose
   value goes to the encrypted secret store (the field id IS the
-  `ctx.secrets` key your code reads back), never into plain settings.
+  `ctx.services.secrets` key your code reads back), never into plain settings.
   The reading agent can view and change ordinary settings too, so users
   can just ask it ("set the article limit to 50"); `secret` fields,
   password-mode text fields, and `agentHidden: true` stay out of the
@@ -103,7 +103,7 @@ of the full surface.
   `[{ "id": "refresh", "label": "Refresh feeds", "everyMinutes": 60 }]`
   (floor: 15 minutes). Declared here so users see them before installing;
   bind the work in `activate` with
-  `ctx.schedule.on("refresh", async () => { ... })`. The host runs it AT
+  `ctx.services.schedules.bind("refresh", async () => { ... })`. The host runs it AT
   LEAST every `everyMinutes` while the app is open and catches up shortly
   after launch when overdue — never at exact times, and never while the
   app is closed.
@@ -165,37 +165,38 @@ just `export default { activate() {} }`.
 - Set `minAppVersion` to the first app version with theme support — older
   apps reject the `ui:themes` permission at install.
 
-## Switching the appearance (`ui:appearance`)
+## Changing appearance through Settings
 
-`ui:themes` says where a theme comes from; `ui:appearance` says when it
-applies. With it, `ctx.appearance` reads and changes the two preferences the
-app's own appearance controls write:
+Appearance is a section of the Settings Domain, not a separate capability.
+Request exact paths in the manifest:
 
-```js
-const themes = await ctx.appearance.listThemes();
-// [{ value: "dark", label: "Dark", polarity: "dark", surfaces: ["app", "reader"] },
-//  { value: "plugin:editorial-themes:nocturne", label: "Nocturne",
-//    polarity: "dark", surfaces: ["reader"], pluginId: "editorial-themes", … }]
-
-const { app, reader } = await ctx.appearance.get();
-await ctx.appearance.setAppTheme("plugin:editorial-themes:nocturne");
-await ctx.appearance.setReaderTheme("warm");
+```json
+{
+  "settingsAccess": {
+    "discover": ["appearance.theme", "reading.theme"],
+    "write": ["appearance.theme", "reading.theme"]
+  }
+}
 ```
 
-- `listThemes()` returns everything both pickers offer — the built-ins
-  (app: `system`/`light`/`dark`; page: `auto`/`light`/`warm`/`dark`) plus
-  every theme any enabled plugin contributes — each with the `surfaces` it
-  may be set on, its `polarity` (null for `system`/`auto`), and a label
-  already resolved to the app's language. Build your options from this rather
-  than hard-coding the vocabulary.
-- The setters take exactly those values and reject anything else, including a
-  `plugin:` ref whose plugin is currently disabled.
-- A write is the user's own selection path: a plugin reader theme still
-  applies its typography preset, and a book pinned to its own appearance
-  keeps it.
-- It is a separate permission from `ui:themes` on purpose — offering a theme
-  is passive, switching one is not — and a theme pack should not ask for it.
-  Requires app **0.5.0** or newer; set `minAppVersion` accordingly.
+Discovery returns the validated option catalog, including themes supplied by
+enabled plugins. Updates use the same validation and effects as Settings:
+
+```js
+const settings = ctx.domains.settings;
+const appearance = await settings.queries.discover({ section: "appearance" });
+const appThemes = appearance.find((entry) => entry.path === "appearance.theme")?.options;
+
+await settings.commands.update([
+  { path: "appearance.theme", value: "dark", target: { kind: "global" } },
+]);
+await settings.commands.update([
+  { path: "reading.theme", value: "warm", target: { kind: "global" } },
+]);
+```
+
+`ui:themes` remains the contribution permission for supplying new themes. It
+does not grant permission to select them.
 
 The first-party [`theme-schedule`](plugins/theme-schedule) plugin in this
 repository is a complete worked example: a daytime and a night look, each
@@ -211,7 +212,7 @@ cleans up on disable.
 export default {
   activate(ctx) {
     // Reader selection menu — runs silently (toast) or opens a dialog view
-    ctx.ui.registerSelectionAction({
+    ctx.contributions.selectionActions.register({
       id: "my-action",
       title: "Do something with the selection",
       icon: "sparkle",
@@ -219,7 +220,7 @@ export default {
     });
 
     // Header buttons — reader: anchored popup; shelf: popup or a full page
-    ctx.ui.registerHeaderAction({
+    ctx.contributions.headerActions.register({
       id: "my-page",
       title: "My page",
       icon: "chart-line-up",
@@ -229,18 +230,18 @@ export default {
     });
 
     // Command palette
-    ctx.ui.registerCommand({ id: "hello", title: "My Plugin: hello", run: () => {} });
+    ctx.contributions.commands.register({ id: "hello", title: "My Plugin: hello", run: () => {} });
 
     // Data domains — reads, event subscriptions, and (with the write
     // permission) commands issued through the app's own event-sourced
     // write path, attributed to your plugin in the event log
-    ctx.annotations?.on("highlight.created", ({ payload }) => {
-      ctx.ui.showToast(`Highlighted: ${payload.text.slice(0, 24)}…`);
+    ctx.domains.annotations?.events.subscribe("highlight.created", ({ payload }) => {
+      ctx.services.ui.showToast(`Highlighted: ${payload.text.slice(0, 24)}…`);
     });
 
     // Agent tools (requires "agent:tools") — the reading agent can call
     // these during chat, namespaced plugin_<id>_<name>
-    ctx.agent?.registerTool({
+    ctx.contributions.agentTools?.register({
       name: "my_tool",
       description: "What the model should know about this tool.",
       parameters: { type: "object", properties: {} },
@@ -250,7 +251,7 @@ export default {
 };
 ```
 
-Read-aloud voices: `ctx.audio.registerVoiceProvider` plugs a TTS engine
+Read-aloud voices: `ctx.contributions.voiceProviders.register` plugs a TTS engine
 into the reader's read-aloud — implement `listVoices()` and
 `synthesize({ text, voiceId })` returning encoded audio bytes (mp3/wav);
 the app owns playback, sentence pacing, prefetch, and system-voice
@@ -259,14 +260,14 @@ with voices wins; no host-side picker): the user enabling your plugin IS
 the opt-in, and a failed synthesis call falls back to the system voice —
 so registering unconditionally is fine. Pair it with `service:network`
 for cloud or local engines and `secret` settings fields (read back via
-`ctx.secrets`) for API keys — see the first-party `tts` plugin.
+`ctx.services.secrets`) for API keys — see the first-party `tts` plugin.
 
 UI is declarative only — view kinds `markdown`, `list`, `form`, and the
 compositional `blocks`, rendered by the app's design system. A list item or
 form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
 or `{ close: true }`. Icons are picked by name from the app's curated
-Phosphor set. Persistent state goes through `ctx.storage` (namespaced
-key-value; `ctx.storage.onChange(fn)` fires when your namespace is written
+Phosphor set. Persistent state goes through `ctx.services.storage` (namespaced
+key-value; `ctx.services.storage.onChange(fn)` fires when your namespace is written
 from outside the plugin — its settings page, the agent — so cached settings
 can be re-read).
 

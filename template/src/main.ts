@@ -11,7 +11,7 @@
  * (reviews ask for the minimum).
  *
  * Plugins run in a Worker sandbox: no DOM APIs (bundle a pure-JS parser if
- * you need one), and `ctx.network.fetch` bodies must be strings or binary.
+ * you need one), and network-service bodies must be strings or binary.
  */
 import type { PluginContext, PluginModule } from "../../types/plugin-api";
 
@@ -21,16 +21,21 @@ type Settings = {
 };
 
 function settings(ctx: PluginContext): Settings {
-  return ctx.storage.get<Settings>("settings") ?? {};
+  return ctx.services.storage.get<Settings>("settings") ?? {};
 }
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {
+    const library = ctx.domains.library;
+    const readingCommands = ctx.domains.reading?.commands;
+    if (!library || !readingCommands) {
+      throw new Error("My Plugin requires library:read and reading:write");
+    }
     // ── Command palette ──────────────────────────────────────────────────
     // The cheapest mount point: reachable from anywhere, bindable in
     // Settings → Shortcuts. Return { toast } for a notice or { view } to
     // open a host-rendered view.
-    ctx.ui.registerCommand({
+    ctx.contributions.commands.register({
       id: "hello",
       title: "My Plugin: hello",
       run: () => ({
@@ -41,7 +46,7 @@ const plugin: PluginModule = {
     // ── Reader selection menu ────────────────────────────────────────────
     // Runs on the selected passage. Only two outcomes exist inside the
     // reader: a silent toast, or a Dialog view.
-    ctx.ui.registerSelectionAction({
+    ctx.contributions.selectionActions.register({
       id: "inspect",
       title: "Inspect selection",
       icon: "sparkle",
@@ -55,15 +60,15 @@ const plugin: PluginModule = {
     // header actions always open popups instead). Views are declared from
     // the host vocabulary — markdown / list / form / detail / blocks — and
     // rendered by the app's design system; plugins never ship UI code.
-    // Reading the shelf needs the "shelf:read" permission.
-    ctx.ui.registerHeaderAction({
+    // Reading the library needs the "library:read" permission.
+    ctx.contributions.headerActions.register({
       id: "overview",
       title: "My Plugin",
       icon: "books",
       surface: "shelf",
       presentation: "page",
       view: async () => {
-        const books = (await ctx.shelf?.books.list()) ?? [];
+        const books = await library.queries.books.list();
         return {
           kind: "list",
           emptyText: "Nothing on the shelf yet.",
@@ -73,7 +78,7 @@ const plugin: PluginModule = {
             subtitle: book.author,
             icon: "book-open",
             onSelect: () => {
-              ctx.reader.openBook(book.id);
+              readingCommands.openBook(book.id);
               return { close: true };
             },
           })),
@@ -84,17 +89,17 @@ const plugin: PluginModule = {
     // ── Where to go from here (see types/plugin-api.d.ts) ────────────────
     // - Declared settings: add fields to manifest `settings` — they render
     //   as your own section in Settings. `secret` fields store credentials
-    //   encrypted (read back via ctx.secrets); `dynamicOptions` selects
-    //   resolve their options through ctx.settings.provideOptions.
-    // - Agent tools (permission "agent:tools"): ctx.agent.registerTool —
+    //   encrypted (read back through services.secrets); `dynamicOptions`
+    //   selects resolve through contributions.settingsOptions.
+    // - Agent tools (permission "agent:tools"): contributions.agentTools —
     //   let the reading assistant query your service during chat.
     // - Scheduled work: declare manifest `schedules`, bind with
-    //   ctx.schedule.on(id, run).
-    // - Read-aloud voices: ctx.audio.registerVoiceProvider turns text into
+    //   services.schedules.bind(id, run).
+    // - Read-aloud voices: contributions.voiceProviders turns text into
     //   audio bytes; the app owns playback and fallback.
-    // - Virtual books (permission "shelf:write"): registerContentProvider +
+    // - Virtual books (permission "library:write"): contentProviders +
     //   addVirtualBook serve chapters on demand — feeds, docs, anything.
-    // - Structured private data: ctx.storage.collection(name) — per-document
+    // - Structured private data: services.storage.collection(name) — per-document
     //   records with optional book provenance, above the plain KV.
   },
 };

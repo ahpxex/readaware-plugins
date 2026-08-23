@@ -6,7 +6,8 @@
   "description": "One sentence about what it does.",
   "author": "you",
   "permissions": [
-    "shelf:read"
+    "library:read",
+    "reading:write"
   ],
   "main": "main.js",
   "settings": [

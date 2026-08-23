@@ -39,9 +39,9 @@ manual override).
 
 ## Permissions
 
-`ui:appearance` — read and change the app theme and reader page color. That
-is the whole of what this plugin touches: no library access, no network, no
-AI calls.
+Exact Settings access to `appearance.theme` and `reading.theme`, for discovery
+and writes. That is the whole of what this plugin touches: no library access,
+no network, no AI calls.
 
 ## Development
 

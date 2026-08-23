@@ -184,16 +184,20 @@ function text(key) {
 var MAX_SLEEP_MS = 60000;
 var MIN_SLEEP_MS = 1000;
 function settingsOf(ctx) {
-  return withDefaults(ctx.storage.get("settings"));
+  return withDefaults(ctx.services.storage.get("settings"));
 }
 function isEnabled(settings) {
   return settings.enabled !== false;
 }
 async function themeOptions(ctx, surface) {
-  const themes = (await ctx.appearance.listThemes()).filter((theme) => theme.surfaces.includes(surface));
+  const path = surface === "app" ? "appearance.theme" : "reading.theme";
+  const entries = await ctx.domains.settings.queries.discover({
+    section: surface === "app" ? "appearance" : "reading"
+  });
+  const themes = entries.find((entry) => entry.path === path)?.options ?? [];
   return [
     { value: KEEP, label: text("keep") },
-    ...themes.map((theme) => ({
+    ...themes.filter((theme) => typeof theme.value === "string").map((theme) => ({
       value: theme.value,
       label: theme.pluginName ? `${theme.label} · ${theme.pluginName}` : theme.label
     }))
@@ -201,7 +205,7 @@ async function themeOptions(ctx, surface) {
 }
 async function applySlot(ctx, slot, options = {}) {
   const mark = { slot: slot.id, app: slot.app, reader: slot.reader };
-  const previous = ctx.storage.get("applied");
+  const previous = ctx.services.storage.get("applied");
   const unchanged = previous?.slot === mark.slot && previous.app === mark.app && previous.reader === mark.reader;
   if (unchanged && !options.force)
     return;
@@ -214,43 +218,48 @@ async function applySlot(ctx, slot, options = {}) {
     }
   };
   if (slot.app !== KEEP) {
-    await attempt(() => ctx.appearance.setAppTheme(slot.app));
+    await attempt(async () => {
+      await ctx.domains.settings.commands.update([
+        { path: "appearance.theme", value: slot.app, target: { kind: "global" } }
+      ]);
+    });
   }
   if (slot.reader !== KEEP) {
-    await attempt(() => ctx.appearance.setReaderTheme(slot.reader));
+    await attempt(async () => {
+      await ctx.domains.settings.commands.update([
+        { path: "reading.theme", value: slot.reader, target: { kind: "global" } }
+      ]);
+    });
   }
-  ctx.storage.set("applied", mark);
+  ctx.services.storage.set("applied", mark);
   if (failures.length > 0) {
-    ctx.ui.showToast(tr(ctx.locale, `failed_${slot.id}`, { message: failures.join("; ") }));
+    ctx.services.ui.showToast(tr(ctx.locale, `failed_${slot.id}`, { message: failures.join("; ") }));
     return;
   }
   if (options.announce) {
-    ctx.ui.showToast(tr(ctx.locale, `applied_${slot.id}`, { time: slot.label }));
+    ctx.services.ui.showToast(tr(ctx.locale, `applied_${slot.id}`, { time: slot.label }));
   }
 }
 var stopClock = null;
 var plugin = {
   activate(ctx) {
-    if (!ctx.appearance) {
-      throw new Error('Theme Schedule needs the "ui:appearance" permission');
-    }
     for (const id of SLOT_IDS) {
-      ctx.settings.provideOptions(`${id}App`, () => themeOptions(ctx, "app"));
-      ctx.settings.provideOptions(`${id}Reader`, () => themeOptions(ctx, "reader"));
+      ctx.contributions.settingsOptions.register(`${id}App`, () => themeOptions(ctx, "app"));
+      ctx.contributions.settingsOptions.register(`${id}Reader`, () => themeOptions(ctx, "reader"));
     }
     const evaluate = async (options = {}) => {
       const settings = settingsOf(ctx);
       if (!isEnabled(settings)) {
-        ctx.storage.remove("applied");
+        ctx.services.storage.remove("applied");
         if (options.announce)
-          ctx.ui.showToast(tr(ctx.locale, "disabled"));
+          ctx.services.ui.showToast(tr(ctx.locale, "disabled"));
         return;
       }
       const slots = readSlots(settings);
       const slot = activeSlot(slots, minuteOfDay(new Date));
       if (!slot) {
         if (options.announce)
-          ctx.ui.showToast(tr(ctx.locale, "noSlots"));
+          ctx.services.ui.showToast(tr(ctx.locale, "noSlots"));
         return;
       }
       await applySlot(ctx, slot, options);
@@ -272,10 +281,10 @@ var plugin = {
         evaluate().finally(arm);
       }, sleepMs());
     };
-    ctx.storage.onChange(() => {
+    ctx.services.storage.onChange(() => {
       evaluate({ force: true });
     });
-    ctx.ui.registerCommand({
+    ctx.contributions.commands.register({
       id: "apply-now",
       title: text("applyNow"),
       icon: "clock",

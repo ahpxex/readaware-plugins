@@ -21,9 +21,10 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const KNOWN_PERMISSIONS = new Set([
   "ui:themes",
-  "ui:appearance",
-  "shelf:read",
-  "shelf:write",
+  "library:read",
+  "library:write",
+  "reading:read",
+  "reading:write",
   "annotations:read",
   "annotations:write",
   "conversations:read",
@@ -32,6 +33,37 @@ const KNOWN_PERMISSIONS = new Set([
   "service:llm",
   "service:clipboard",
 ]);
+const SETTINGS_PATH_PATTERN =
+  /^[a-z][a-zA-Z0-9-]*(?:\.[a-z][a-zA-Z0-9-]*)*(?:\.\*)?$/;
+
+function checkSettingsAccess(id, manifest) {
+  const access = manifest.settingsAccess;
+  if (access == null) return;
+  if (typeof access !== "object" || Array.isArray(access)) {
+    problem(`plugins/${id}: settingsAccess must be an object`);
+    return;
+  }
+  for (const operation of Object.keys(access)) {
+    if (!["discover", "read", "write"].includes(operation)) {
+      problem(`plugins/${id}: unknown settingsAccess operation "${operation}"`);
+      continue;
+    }
+    const paths = access[operation];
+    if (
+      !Array.isArray(paths) ||
+      paths.some(
+        (path) =>
+          typeof path !== "string" ||
+          path === "*" ||
+          !SETTINGS_PATH_PATTERN.test(path),
+      )
+    ) {
+      problem(
+        `plugins/${id}: settingsAccess.${operation} needs exact paths or section.* groups`,
+      );
+    }
+  }
+}
 
 // ── Theme/font grammars — mirror of the app's plugin-theme.ts validators ──
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -242,6 +274,7 @@ for (const entry of registry.plugins) {
   if (declared !== listed) {
     problem(`plugins/${entry.id}: registry permissions must equal manifest.permissions`);
   }
+  checkSettingsAccess(entry.id, manifest);
 
   const main = typeof manifest.main === "string" ? manifest.main : "main.js";
   for (const file of [main, ...(entry.files ?? [])]) {

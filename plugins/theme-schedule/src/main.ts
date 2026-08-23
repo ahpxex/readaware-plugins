@@ -11,16 +11,14 @@
  *     The last transition is remembered in storage, so a relaunch inside the
  *     same slot does not re-apply it either.
  *  2. **The host owns the appearance; this plugin owns only the clock.** Every
- *     change goes through `ctx.appearance`, the same seam Settings writes, so
+ *     change goes through the Settings Domain, so
  *     a scheduled switch is indistinguishable from a hand-picked one — a
  *     plugin reader theme still applies its typography preset, and a book
  *     pinned to its own appearance keeps it.
  */
 import type {
-  PluginAppThemeValue,
   PluginContext,
   PluginModule,
-  PluginReaderThemeValue,
   PluginSelectOption,
 } from "../../../types/plugin-api";
 import {
@@ -51,7 +49,7 @@ const MIN_SLEEP_MS = 1_000;
 type AppliedMark = { slot: string; app: string; reader: string };
 
 function settingsOf(ctx: PluginContext): Settings {
-  return withDefaults(ctx.storage.get<Settings>("settings"));
+  return withDefaults(ctx.services.storage.get<Settings>("settings"));
 }
 
 function isEnabled(settings: Settings): boolean {
@@ -67,15 +65,21 @@ async function themeOptions(
   ctx: PluginContext,
   surface: "app" | "reader",
 ): Promise<PluginSelectOption[]> {
-  const themes = (await ctx.appearance!.listThemes()).filter((theme) =>
-    theme.surfaces.includes(surface),
-  );
+  const path = surface === "app" ? "appearance.theme" : "reading.theme";
+  const entries = await ctx.domains.settings.queries.discover({
+    section: surface === "app" ? "appearance" : "reading",
+  });
+  const themes = entries.find((entry) => entry.path === path)?.options ?? [];
   return [
     { value: KEEP, label: text("keep") },
-    ...themes.map((theme) => ({
-      value: theme.value,
-      label: theme.pluginName ? `${theme.label} · ${theme.pluginName}` : theme.label,
-    })),
+    ...themes
+      .filter((theme): theme is typeof theme & { value: string } =>
+        typeof theme.value === "string",
+      )
+      .map((theme) => ({
+        value: theme.value,
+        label: theme.pluginName ? `${theme.label} · ${theme.pluginName}` : theme.label,
+      })),
   ];
 }
 
@@ -92,7 +96,7 @@ async function applySlot(
   options: { force?: boolean; announce?: boolean } = {},
 ): Promise<void> {
   const mark: AppliedMark = { slot: slot.id, app: slot.app, reader: slot.reader };
-  const previous = ctx.storage.get<AppliedMark>("applied");
+  const previous = ctx.services.storage.get<AppliedMark>("applied");
   const unchanged =
     previous?.slot === mark.slot &&
     previous.app === mark.app &&
@@ -108,23 +112,29 @@ async function applySlot(
     }
   };
   if (slot.app !== KEEP) {
-    await attempt(() => ctx.appearance!.setAppTheme(slot.app as PluginAppThemeValue));
+    await attempt(async () => {
+      await ctx.domains.settings.commands.update([
+        { path: "appearance.theme", value: slot.app, target: { kind: "global" } },
+      ]);
+    });
   }
   if (slot.reader !== KEEP) {
-    await attempt(() =>
-      ctx.appearance!.setReaderTheme(slot.reader as PluginReaderThemeValue),
-    );
+    await attempt(async () => {
+      await ctx.domains.settings.commands.update([
+        { path: "reading.theme", value: slot.reader, target: { kind: "global" } },
+      ]);
+    });
   }
-  ctx.storage.set("applied", mark);
+  ctx.services.storage.set("applied", mark);
 
   if (failures.length > 0) {
-    ctx.ui.showToast(
+    ctx.services.ui.showToast(
       tr(ctx.locale, `failed_${slot.id}`, { message: failures.join("; ") }),
     );
     return;
   }
   if (options.announce) {
-    ctx.ui.showToast(tr(ctx.locale, `applied_${slot.id}`, { time: slot.label }));
+    ctx.services.ui.showToast(tr(ctx.locale, `applied_${slot.id}`, { time: slot.label }));
   }
 }
 
@@ -133,16 +143,12 @@ let stopClock: (() => void) | null = null;
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {
-    if (!ctx.appearance) {
-      throw new Error('Theme Schedule needs the "ui:appearance" permission');
-    }
-
     // ── The declared theme selects ────────────────────────────────────────
     // Static options cannot know what themes are installed, so each slot's
     // two pickers resolve their list at open time.
     for (const id of SLOT_IDS) {
-      ctx.settings.provideOptions(`${id}App`, () => themeOptions(ctx, "app"));
-      ctx.settings.provideOptions(`${id}Reader`, () => themeOptions(ctx, "reader"));
+      ctx.contributions.settingsOptions.register(`${id}App`, () => themeOptions(ctx, "app"));
+      ctx.contributions.settingsOptions.register(`${id}Reader`, () => themeOptions(ctx, "reader"));
     }
 
     /** Evaluate the schedule against the clock and act if a slot changed. */
@@ -151,14 +157,14 @@ const plugin: PluginModule = {
       if (!isEnabled(settings)) {
         // Nothing is reverted: the user's current appearance is theirs. Only
         // the mark is cleared, so re-enabling applies the slot in force.
-        ctx.storage.remove("applied");
-        if (options.announce) ctx.ui.showToast(tr(ctx.locale, "disabled"));
+        ctx.services.storage.remove("applied");
+        if (options.announce) ctx.services.ui.showToast(tr(ctx.locale, "disabled"));
         return;
       }
       const slots = readSlots(settings);
       const slot = activeSlot(slots, minuteOfDay(new Date()));
       if (!slot) {
-        if (options.announce) ctx.ui.showToast(tr(ctx.locale, "noSlots"));
+        if (options.announce) ctx.services.ui.showToast(tr(ctx.locale, "noSlots"));
         return;
       }
       await applySlot(ctx, slot, options);
@@ -188,11 +194,11 @@ const plugin: PluginModule = {
 
     // A settings edit takes effect at once — waiting out a tick to see the
     // theme you just picked reads as the setting not having worked.
-    ctx.storage.onChange(() => {
+    ctx.services.storage.onChange(() => {
       void evaluate({ force: true });
     });
 
-    ctx.ui.registerCommand({
+    ctx.contributions.commands.register({
       id: "apply-now",
       title: text("applyNow"),
       icon: "clock",
