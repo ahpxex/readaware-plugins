@@ -38,12 +38,22 @@ of the full surface.
 
 ## manifest.json
 
+Every manifest includes a positive integer `schemaVersion` for the plugin's
+private KV and document data. Change it only when that data shape changes, and
+export `migrate(storageOnlyContext, { fromVersion, toVersion, direction })` for
+upgrades and supported downgrades.
+
 ```json
 {
   "id": "my-plugin",
   "name": "My Plugin",
   "version": "0.1.0",
+  "schemaVersion": 1,
   "minAppVersion": "0.3.0",
+  "requires": {
+    "contributions": { "commands": "^1.0.0" },
+    "services": { "storage": "^1.0.0" }
+  },
   "description": "One sentence about what it does.",
   "author": "you",
   "permissions": ["service:network"],
@@ -207,6 +217,12 @@ picking an app theme and a page color, switched on the device's own clock.
 `main.js` default-exports a lifecycle object. Everything goes through the
 `ctx` handed to `activate`; every `register*` returns a disposable the app
 cleans up on disable.
+
+`activate()` is a read-and-declare pass. Registrations are staged until the
+host health-checks and promotes the plugin; writes, secrets, network, LLM, UI
+effects, and navigation are unavailable before that point. Put data changes in
+`migrate()`, and start runtime work from a registered schedule, subscription,
+command, provider, or action.
 
 ```js
 export default {

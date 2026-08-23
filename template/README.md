@@ -7,7 +7,7 @@ A commented TypeScript skeleton for a ReadAware plugin.
 1. Copy this folder somewhere and rename it to your plugin id
    (lowercase letters, digits, hyphens — the folder name must equal
    `manifest.json`'s `id`).
-2. Edit `manifest.json` (id, name, description, permissions — declare only
+2. Edit `manifest.json` (id, name, description, schemaVersion, permissions — declare only
    what the code uses) and `src/main.ts`.
 3. Build: `bun run build` (emits `main.js`, the module the app loads;
    `bun run check` typechecks against the contract).

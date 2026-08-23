@@ -29,6 +29,9 @@ const KNOWN_PERMISSIONS = new Set([
   "annotations:write",
   "conversations:read",
   "agent:tools",
+  "agent:context",
+  "agent:retrieval",
+  "agent:memory",
   "service:network",
   "service:llm",
   "service:clipboard",
@@ -268,6 +271,9 @@ for (const entry of registry.plugins) {
     problem(
       `plugins/${entry.id}: manifest.name "${manifest.name}" does not match registry "${entry.name}"`,
     );
+  }
+  if (!Number.isSafeInteger(manifest.schemaVersion) || manifest.schemaVersion < 1) {
+    problem(`plugins/${entry.id}: manifest.schemaVersion must be a positive integer`);
   }
   const declared = JSON.stringify([...(manifest.permissions ?? [])].sort());
   const listed = JSON.stringify([...(entry.permissions ?? [])].sort());

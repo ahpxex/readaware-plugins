@@ -215,7 +215,12 @@ const plugin: PluginModule = {
       timer = null;
     };
 
-    void evaluate().finally(arm);
+    // Activation is registration-only. The host publishes this schedule only
+    // after the candidate is committed, then its catch-up run starts the clock.
+    ctx.services.schedules.bind("theme-clock", async () => {
+      if (timer === null) arm();
+      await evaluate();
+    });
   },
 
   deactivate() {

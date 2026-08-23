@@ -91,7 +91,7 @@ export type IsoDate = string;
 export type DomainId = "library" | "reading" | "annotations" | "conversations" | "settings";
 export type DomainAccess = "read" | "write";
 export type DomainPermission = "library:read" | "library:write" | "reading:read" | "reading:write" | "annotations:read" | "annotations:write" | "conversations:read";
-export type ContributionId = "selectionActions" | "headerActions" | "commands" | "settingsOptions" | "voiceProviders" | "contentProviders" | "readerModes" | "agentTools" | "themes" | "fonts";
+export type ContributionId = "selectionActions" | "headerActions" | "commands" | "settingsOptions" | "voiceProviders" | "contentProviders" | "readerModes" | "agentTools" | "agentContextProviders" | "agentRetrievalProviders" | "memoryCandidateProviders" | "themes" | "fonts";
 export type HostServiceId = "storage" | "secrets" | "ui" | "schedules" | "session" | "network" | "llm" | "clipboard";
 export type DeclarativeSchemaId = "views" | "settings" | "themes";
 
@@ -222,6 +222,9 @@ export type PluginPermission =
   | "annotations:write"
   | "conversations:read"
   | "agent:tools"
+  | "agent:context"
+  | "agent:retrieval"
+  | "agent:memory"
   | "ui:themes"
   | "service:network"
   | "service:llm"
@@ -248,6 +251,8 @@ export type PluginManifest = {
   id: string;
   name: string;
   version: string;
+  /** Version of this plugin's private KV and document data. */
+  schemaVersion: number;
   description?: string;
   author?: string;
   /** Lowest app version the plugin supports, e.g. "0.3.0". */
@@ -1563,6 +1568,19 @@ export type PluginStorage = {
   onChange(handler: () => void): PluginDisposable;
 };
 
+export type PluginMigrationStorage = Omit<PluginStorage, "onChange">;
+export type PluginLifecyclePhase = "activating" | "migrating" | "active";
+export type PluginMigration = {
+  fromVersion: number;
+  toVersion: number;
+  direction: "upgrade" | "downgrade";
+};
+export type PluginMigrationContext = {
+  readonly manifest: Readonly<PluginManifest>;
+  readonly lifecycle: { readonly phase: "migrating" };
+  readonly storage: PluginMigrationStorage;
+};
+
 export type PluginExportFile = {
   /** Suggested basename shown by the host save dialog. */
   filename: string;
@@ -1595,6 +1613,46 @@ export type PluginDocumentCollection = {
   }): Promise<PluginDocument<T>[]>;
 };
 
+export type PluginAgentScope =
+  | { kind: "global"; threadId: string }
+  | { kind: "book"; bookId: string };
+export type PluginAgentContextBlock = { title?: string; content: string };
+export type PluginAgentContextProvider = {
+  id: string;
+  contexts?: Array<PluginAgentScope["kind"]>;
+  provide(input: { scope: PluginAgentScope; userText: string }):
+    | PluginAgentContextBlock[]
+    | Promise<PluginAgentContextBlock[]>;
+};
+export type PluginAgentRetrievalItem = {
+  title?: string;
+  content: string;
+  location?: string;
+};
+export type PluginAgentRetrievalProvider = {
+  id: string;
+  label: string;
+  description: string;
+  contexts?: Array<PluginAgentScope["kind"]>;
+  retrieve(input: { scope: PluginAgentScope; query: string; limit: number }):
+    | PluginAgentRetrievalItem[]
+    | Promise<PluginAgentRetrievalItem[]>;
+};
+export type PluginMemoryCandidate = {
+  scope: "user" | "global" | "book";
+  kind: "fact" | "preference" | "insight" | "summary";
+  content: string;
+};
+export type PluginMemoryCandidateProvider = {
+  id: string;
+  contexts?: Array<PluginAgentScope["kind"]>;
+  propose(input: {
+    scope: PluginAgentScope;
+    userText: string;
+    assistantText: string;
+  }): PluginMemoryCandidate[] | Promise<PluginMemoryCandidate[]>;
+};
+
 export type PluginContributions = {
   selectionActions: {
     register(action: PluginSelectionAction): PluginDisposable;
@@ -1624,6 +1682,15 @@ export type PluginContributions = {
   };
   agentTools?: {
     register(tool: PluginToolDefinition): PluginDisposable;
+  };
+  agentContextProviders?: {
+    register(provider: PluginAgentContextProvider): PluginDisposable;
+  };
+  agentRetrievalProviders?: {
+    register(provider: PluginAgentRetrievalProvider): PluginDisposable;
+  };
+  memoryCandidateProviders?: {
+    register(provider: PluginMemoryCandidateProvider): PluginDisposable;
   };
 };
 
@@ -1674,6 +1741,7 @@ export type PluginContext = {
   readonly manifest: Readonly<PluginManifest>;
   readonly appVersion: string;
   readonly locale: string;
+  readonly lifecycle: { readonly phase: PluginLifecyclePhase };
   /** Only capabilities visible to this plugin actor, with host-side versions. */
   readonly capabilities: Readonly<PluginCapabilityView>;
   domains: PluginDomains;
@@ -1684,5 +1752,6 @@ export type PluginContext = {
 /** The default export of a plugin's entry module. */
 export type PluginModule = {
   activate(ctx: PluginContext): void | Promise<void>;
+  migrate?(ctx: PluginMigrationContext, migration: PluginMigration): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 };

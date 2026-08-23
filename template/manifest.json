@@ -2,7 +2,21 @@
   "id": "my-plugin",
   "name": "My Plugin",
   "version": "0.1.0",
+  "schemaVersion": 1,
   "minAppVersion": "0.3.0",
+  "requires": {
+    "domains": {
+      "library": "^1.0.0",
+      "reading": "^1.0.0"
+    },
+    "contributions": {
+      "commands": "^1.0.0",
+      "selectionActions": "^1.0.0",
+      "headerActions": "^1.0.0"
+    },
+    "services": { "storage": "^1.0.0" },
+    "schemas": { "views": "^1.0.0", "settings": "^1.0.0" }
+  },
   "description": "One sentence about what it does.",
   "author": "you",
   "permissions": [

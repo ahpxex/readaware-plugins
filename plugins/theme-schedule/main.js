@@ -300,7 +300,11 @@ var plugin = {
         clearTimeout(timer);
       timer = null;
     };
-    evaluate().finally(arm);
+    ctx.services.schedules.bind("theme-clock", async () => {
+      if (timer === null)
+        arm();
+      await evaluate();
+    });
   },
   deactivate() {
     stopClock?.();
