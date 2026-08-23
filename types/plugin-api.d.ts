@@ -91,6 +91,9 @@ export type IsoDate = string;
 export type DomainId = "library" | "reading" | "annotations" | "conversations" | "settings";
 export type DomainAccess = "read" | "write";
 export type DomainPermission = "library:read" | "library:write" | "reading:read" | "reading:write" | "annotations:read" | "annotations:write" | "conversations:read";
+export type ContributionId = "selectionActions" | "headerActions" | "commands" | "settingsOptions" | "voiceProviders" | "contentProviders" | "readerModes" | "agentTools" | "themes" | "fonts";
+export type HostServiceId = "storage" | "secrets" | "ui" | "schedules" | "session" | "network" | "llm" | "clipboard";
+export type DeclarativeSchemaId = "views" | "settings" | "themes";
 
 /** Canonical product settings vocabulary shared by UI, agent, and plugins. */
 export type SettingsSection =
@@ -224,6 +227,20 @@ export type PluginPermission =
   | "service:llm"
   | "service:clipboard";
 
+export type PluginCapabilityRequirements = {
+  domains?: Partial<Record<DomainId, string>>;
+  contributions?: Partial<Record<ContributionId, string>>;
+  services?: Partial<Record<HostServiceId, string>>;
+  schemas?: Partial<Record<DeclarativeSchemaId, string>>;
+};
+
+export type PluginCapabilityView = {
+  domains: Partial<Record<DomainId, string>>;
+  contributions: Partial<Record<ContributionId, string>>;
+  services: Partial<Record<HostServiceId, string>>;
+  schemas: Partial<Record<DeclarativeSchemaId, string>>;
+};
+
 // ─── Manifest ────────────────────────────────────────────────────────────────
 
 export type PluginManifest = {
@@ -235,6 +252,8 @@ export type PluginManifest = {
   author?: string;
   /** Lowest app version the plugin supports, e.g. "0.3.0". */
   minAppVersion?: string;
+  /** Exact host capability contracts and semver ranges this plugin needs. */
+  requires: PluginCapabilityRequirements;
   permissions?: PluginPermission[];
   /** Exact Settings Domain paths, or an explicit `section.*` group. */
   settingsAccess?: SettingsAccessPolicy;
@@ -1655,6 +1674,8 @@ export type PluginContext = {
   readonly manifest: Readonly<PluginManifest>;
   readonly appVersion: string;
   readonly locale: string;
+  /** Only capabilities visible to this plugin actor, with host-side versions. */
+  readonly capabilities: Readonly<PluginCapabilityView>;
   domains: PluginDomains;
   contributions: PluginContributions;
   services: PluginHostServices;
