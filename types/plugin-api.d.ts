@@ -211,7 +211,6 @@ export interface SettingsChangedEvent {
  * control are not permissions — every plugin has them.
  */
 export type PluginPermission =
-  | "ui:themes"
   | "library:read"
   | "library:write"
   | "reading:read"
@@ -220,6 +219,7 @@ export type PluginPermission =
   | "annotations:write"
   | "conversations:read"
   | "agent:tools"
+  | "ui:themes"
   | "service:network"
   | "service:llm"
   | "service:clipboard";
