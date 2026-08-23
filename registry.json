@@ -3,10 +3,10 @@
     {
       "id": "theme-schedule",
       "name": "Theme Schedule",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Switch the app theme and the book page color automatically: one look for daytime, another from the hour you call night.",
       "author": "ReadAware",
-      "minAppVersion": "0.5.0"
+      "minAppVersion": "0.5.0-6"
     }
   ]
 }

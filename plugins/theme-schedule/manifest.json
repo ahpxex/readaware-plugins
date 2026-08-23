@@ -1,9 +1,9 @@
 {
   "id": "theme-schedule",
   "name": "Theme Schedule",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "schemaVersion": 1,
-  "minAppVersion": "0.5.0",
+  "minAppVersion": "0.5.0-6",
   "requires": {
     "domains": { "settings": "^1.0.0" },
     "contributions": {
