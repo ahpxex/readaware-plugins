@@ -80,7 +80,11 @@ upgrades and supported downgrades.
   progress, and reading time), `annotations`, `conversations` (read-only).
   `agent:tools` registers tools
   on the reading agent; `ui:themes` unlocks the declarative `themes`/`fonts`
-  fields below; services are `service:network`, `service:llm`
+  fields below; `sync:transport` lets the plugin provide a sync backend (a
+  ciphertext mailbox on a server of the plugin's choosing — the app keeps
+  encryption, the event log, and merge, and the plugin only ever carries
+  sealed envelopes; see `PluginSyncTransport` in the contract); services are
+  `service:network`, `service:llm`
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
 - `main` — the entry module, default `main.js`.

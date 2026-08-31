@@ -91,7 +91,7 @@ export type IsoDate = string;
 export type DomainId = "library" | "reading" | "annotations" | "conversations" | "settings";
 export type DomainAccess = "read" | "write";
 export type DomainPermission = "library:read" | "library:write" | "reading:read" | "reading:write" | "annotations:read" | "annotations:write" | "conversations:read";
-export type ContributionId = "selectionActions" | "headerActions" | "commands" | "settingsOptions" | "voiceProviders" | "contentProviders" | "readerModes" | "agentTools" | "agentContextProviders" | "agentRetrievalProviders" | "memoryCandidateProviders" | "themes" | "fonts";
+export type ContributionId = "selectionActions" | "headerActions" | "commands" | "settingsOptions" | "voiceProviders" | "contentProviders" | "readerModes" | "agentTools" | "agentContextProviders" | "agentRetrievalProviders" | "memoryCandidateProviders" | "themes" | "fonts" | "syncTransports";
 export type HostServiceId = "storage" | "secrets" | "ui" | "schedules" | "session" | "network" | "llm" | "clipboard";
 export type DeclarativeSchemaId = "views" | "settings" | "themes";
 
@@ -207,6 +207,9 @@ export interface SettingsChangedEvent {
  *   install consent must surface it.
  * - Settings access is declared separately by exact path in `settingsAccess`.
  * - `agent:tools` — register tools on the reading agent.
+ * - `sync:transport` — provide a sync backend (a remote mailbox the host's
+ *   sync engine pushes to and pulls from). The plugin only ever moves
+ *   ciphertext: encryption, the event log, and merge stay host-owned.
  * - `service:*` — platform and AI services (network, one-shot LLM,
  *   clipboard).
  *
@@ -226,6 +229,7 @@ export type PluginPermission =
   | "agent:retrieval"
   | "agent:memory"
   | "ui:themes"
+  | "sync:transport"
   | "service:network"
   | "service:llm"
   | "service:clipboard";
@@ -1653,6 +1657,118 @@ export type PluginMemoryCandidateProvider = {
   }): PluginMemoryCandidate[] | Promise<PluginMemoryCandidate[]>;
 };
 
+// ─── Sync transports (`sync:transport`) ──────────────────────────────────────
+//
+// A sync transport is a remote CIPHERTEXT mailbox: the host's sync engine
+// seals every event and blob before it reaches the plugin and opens them only
+// after they come back, so a transport never sees event types, payloads, book
+// bytes, or keys — only opaque envelopes and their routing fields (event id +
+// HLC stamp). What the plugin owns is purely "where the remote is and how to
+// talk to it" (WebDAV, S3, …); ordering, merge, cursors, and crypto stay
+// host-side.
+//
+// Remote layout contract (the host's feed adapter depends on it):
+//
+//  - **Event batches are per-device and dense.** Device `d`'s batches are
+//    numbered 0..N-1 with no holes; a device only ever appends batch N after
+//    batch N-1 exists. `listEventBatches` reports each device's batch count;
+//    `getEventBatch` returns one batch verbatim. Batches are immutable once
+//    written.
+//  - **Blobs mirror the relay's envelope formats** (v1 whole / v2 descriptor
+//    + parts): `putBlob`/`getBlob` move the main object, `putBlobPart` stages
+//    one sealed part, `commitBlob` must verify all parts exist and then write
+//    the descriptor the engine reads back via `getBlob`.
+//  - **Meta objects** are small named files next to the data (key material,
+//    markers). `putMetaIfAbsent` must be create-only: when the object already
+//    exists it reports `"exists"` and leaves it untouched — that is the
+//    first-writer-wins ritual two devices use to agree on key material.
+//
+// Failure vocabulary: throw errors carrying a stable `code` property from the
+// `sync/*` family where the cause is known — `sync/quota` and
+// `sync/file-too-large` mark a blob as permanently rejected instead of
+// retried, `sync/unauthorized` and `sync/network` drive the status surfaces'
+// copy. Uncoded errors are treated as transient and retried with backoff.
+
+/**
+ * Hybrid Logical Clock stamp — gives every event a total, causally-consistent
+ * order across devices so two local logs can be merged deterministically.
+ */
+export interface HlcStamp {
+  /** Wall-clock milliseconds at emit time. */
+  wallMs: number;
+  /** Monotonic counter to break ties within the same wallMs on one device. */
+  counter: number;
+  /** Stable per-device id; the final tiebreaker. */
+  deviceId: string;
+}
+
+/**
+ * One sealed event as it crosses a sync transport. The clear fields are
+ * exactly what routing needs: `id` for idempotent dedup, `hlc` for merge
+ * ordering. Everything that describes behavior lives inside `ciphertext`.
+ */
+export type SealedEventWire = {
+  id: string;
+  hlc: HlcStamp;
+  /** Envelope version — room to rotate algorithms/keys without a flag day. */
+  v: 1;
+  /** 24-byte XChaCha20 nonce, base64. */
+  nonce: string;
+  ciphertext: string;
+};
+
+/** One device's dense batch range as the remote currently holds it. */
+export type PluginSyncBatchListing = Array<{ deviceId: string; count: number }>;
+
+/**
+ * A live connection to one remote mailbox, produced by `open()` from the
+ * plugin's current settings. All methods may be called repeatedly and
+ * concurrently within one session.
+ */
+export type PluginSyncTransportSession = {
+  /**
+   * Stable identity of the remote mailbox (derive it from the normalized
+   * endpoint + account + base path). The host binds the local push/pull
+   * bookkeeping to it: a different `endpointId` after connect means "this is
+   * another mailbox" and sync refuses until the user reconnects.
+   */
+  endpointId: string;
+  /** Cheap reachability + credential check; used by the connect flow. */
+  probe(): Promise<void>;
+  /** Read a named meta object; null when it does not exist. */
+  getMeta(name: string): Promise<Uint8Array | null>;
+  /** Create-only write: `"exists"` (leaving the remote untouched) when the
+   *  object is already there — first writer wins. */
+  putMetaIfAbsent(name: string, bytes: Uint8Array): Promise<"stored" | "exists">;
+  listEventBatches(): Promise<PluginSyncBatchListing>;
+  getEventBatch(deviceId: string, index: number): Promise<SealedEventWire[]>;
+  /** Append one immutable batch; must fail rather than overwrite an existing
+   *  index. */
+  putEventBatch(
+    deviceId: string,
+    index: number,
+    events: SealedEventWire[],
+  ): Promise<void>;
+  putBlob(key: string, bytes: Uint8Array): Promise<void>;
+  getBlob(key: string): Promise<Uint8Array | null>;
+  putBlobPart(key: string, index: number, parts: number, bytes: Uint8Array): Promise<void>;
+  commitBlob(key: string, parts: number): Promise<void>;
+  getBlobPart(key: string, index: number): Promise<Uint8Array>;
+};
+
+export type PluginSyncTransport = {
+  /** Unique within the plugin. */
+  id: string;
+  /** Backend name shown in Settings → Data & Sync (e.g. "WebDAV"). */
+  label: PluginText;
+  /**
+   * Build a session from the plugin's CURRENT settings. Must not touch the
+   * network (that is `probe`'s job); throw a descriptive error when required
+   * settings are missing.
+   */
+  open(): Promise<PluginSyncTransportSession>;
+};
+
 export type PluginContributions = {
   selectionActions: {
     register(action: PluginSelectionAction): PluginDisposable;
@@ -1691,6 +1807,9 @@ export type PluginContributions = {
   };
   memoryCandidateProviders?: {
     register(provider: PluginMemoryCandidateProvider): PluginDisposable;
+  };
+  syncTransports?: {
+    register(transport: PluginSyncTransport): PluginDisposable;
   };
 };
 

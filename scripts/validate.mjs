@@ -35,6 +35,7 @@ const KNOWN_PERMISSIONS = new Set([
   "service:network",
   "service:llm",
   "service:clipboard",
+  "sync:transport",
 ]);
 const SETTINGS_PATH_PATTERN =
   /^[a-z][a-zA-Z0-9-]*(?:\.[a-z][a-zA-Z0-9-]*)*(?:\.\*)?$/;

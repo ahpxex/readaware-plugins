@@ -7,6 +7,18 @@
       "description": "Switch the app theme and the book page color automatically: one look for daytime, another from the hour you call night.",
       "author": "ReadAware",
       "minAppVersion": "0.5.0-6"
+    },
+    {
+      "id": "webdav-sync",
+      "name": "WebDAV Sync",
+      "version": "0.1.0",
+      "description": "Sync your end-to-end encrypted library through your own WebDAV server (Nextcloud, 坚果云, …) instead of the ReadAware relay.",
+      "author": "ReadAware",
+      "minAppVersion": "0.5.1",
+      "permissions": [
+        "service:network",
+        "sync:transport"
+      ]
     }
   ]
 }
