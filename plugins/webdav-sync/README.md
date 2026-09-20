@@ -16,9 +16,9 @@ anything it stores.
 1. Enable the plugin, then open its settings and fill in the server URL,
    username, password, and the folder to store data under (created if
    missing). Many providers require an app-specific password for WebDAV.
-2. Go to Settings → Data & Sync. The plugin appears as a sync backend with a
-   **Connect** button; connecting checks the server and asks for the
-   encryption passphrase.
+2. Go to Settings → Plugin Sync and select WebDAV. Connect to check the
+   server and enter the encryption passphrase. Use **Sync now** whenever you
+   want to synchronize; plugin transports do not sync automatically.
 3. Repeat on every device with the same server and passphrase.
 
 Using the WebDAV backend and a ReadAware account are mutually exclusive —
@@ -31,5 +31,4 @@ First-party plugin. `main.js` is bundled unminified from the canonical
 source in the app repository:
 <https://github.com/ahpxex/read-aware/tree/main/plugins/webdav-sync>
 
-Requires ReadAware ≥ 0.5.1 (the release that ships the `sync:transport`
-capability).
+Requires ReadAware ≥ 0.6.0 (the versioned transport-session API).

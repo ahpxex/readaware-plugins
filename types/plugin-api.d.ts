@@ -1552,8 +1552,8 @@ export type PluginDomains = {
 
 export type PluginStorage = {
   get<T = unknown>(key: string): T | null;
-  set(key: string, value: unknown): void;
-  remove(key: string): void;
+  set(key: string, value: unknown): Promise<void>;
+  remove(key: string): Promise<void>;
   /**
    * A named document collection — structured plugin-private data one tier
    * above the KV (queryable, per-document, optionally book-anchored). Backed

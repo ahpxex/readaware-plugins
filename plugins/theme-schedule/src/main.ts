@@ -125,7 +125,7 @@ async function applySlot(
       ]);
     });
   }
-  ctx.services.storage.set("applied", mark);
+  await ctx.services.storage.set("applied", mark);
 
   if (failures.length > 0) {
     ctx.services.ui.showToast(
@@ -157,7 +157,7 @@ const plugin: PluginModule = {
       if (!isEnabled(settings)) {
         // Nothing is reverted: the user's current appearance is theirs. Only
         // the mark is cleared, so re-enabling applies the slot in force.
-        ctx.services.storage.remove("applied");
+        await ctx.services.storage.remove("applied");
         if (options.announce) ctx.services.ui.showToast(tr(ctx.locale, "disabled"));
         return;
       }
@@ -188,14 +188,14 @@ const plugin: PluginModule = {
     const arm = () => {
       if (stopped) return;
       timer = setTimeout(() => {
-        void evaluate().finally(arm);
+        void evaluate().catch((error) => console.error("[theme-schedule] Evaluation failed", error)).finally(arm);
       }, sleepMs());
     };
 
     // A settings edit takes effect at once — waiting out a tick to see the
     // theme you just picked reads as the setting not having worked.
     ctx.services.storage.onChange(() => {
-      void evaluate({ force: true });
+      return evaluate({ force: true });
     });
 
     ctx.contributions.commands.register({

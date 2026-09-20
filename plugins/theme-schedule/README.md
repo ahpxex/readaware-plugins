@@ -49,3 +49,6 @@ no network, no AI calls.
 bun run build   # bundles src/main.ts into main.js
 bun test        # the schedule logic (parsing, slot choice, wrap-around)
 ```
+
+Requires ReadAware ≥ 0.6.0. Storage writes are awaited before a scheduled
+transition is acknowledged.

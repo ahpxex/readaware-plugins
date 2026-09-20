@@ -1,4 +1,4 @@
-// plugins/theme-schedule/src/schedule.ts
+// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/schedule.ts
 var KEEP = "keep";
 var SLOT_IDS = ["day", "night"];
 var DEFAULT_SETTINGS = {
@@ -77,7 +77,7 @@ function minuteOfDay(now) {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-// plugins/theme-schedule/src/strings.ts
+// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/strings.ts
 var STRINGS = {
   en: {
     keep: "Keep current",
@@ -180,7 +180,7 @@ function text(key) {
   };
 }
 
-// plugins/theme-schedule/src/main.ts
+// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/main.ts
 var MAX_SLEEP_MS = 60000;
 var MIN_SLEEP_MS = 1000;
 function settingsOf(ctx) {
@@ -231,7 +231,7 @@ async function applySlot(ctx, slot, options = {}) {
       ]);
     });
   }
-  ctx.services.storage.set("applied", mark);
+  await ctx.services.storage.set("applied", mark);
   if (failures.length > 0) {
     ctx.services.ui.showToast(tr(ctx.locale, `failed_${slot.id}`, { message: failures.join("; ") }));
     return;
@@ -250,7 +250,7 @@ var plugin = {
     const evaluate = async (options = {}) => {
       const settings = settingsOf(ctx);
       if (!isEnabled(settings)) {
-        ctx.services.storage.remove("applied");
+        await ctx.services.storage.remove("applied");
         if (options.announce)
           ctx.services.ui.showToast(tr(ctx.locale, "disabled"));
         return;
@@ -278,11 +278,11 @@ var plugin = {
       if (stopped)
         return;
       timer = setTimeout(() => {
-        evaluate().finally(arm);
+        evaluate().catch((error) => console.error("[theme-schedule] Evaluation failed", error)).finally(arm);
       }, sleepMs());
     };
     ctx.services.storage.onChange(() => {
-      evaluate({ force: true });
+      return evaluate({ force: true });
     });
     ctx.contributions.commands.register({
       id: "apply-now",
