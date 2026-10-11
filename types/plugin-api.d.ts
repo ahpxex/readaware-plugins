@@ -1,7 +1,7 @@
 /**
- * ReadAware plugin API — the public contract of ReadAware 0.6.5.
+ * ReadAware plugin API — the public contract of ReadAware 0.6.6.
  *
- * GENERATED from ahpxex/read-aware at v0.6.5 (daaf69543b91) by
+ * GENERATED from ahpxex/read-aware at v0.6.6 (6e74e4f2beec) by
  * scripts/sync-plugin-dts.ts. Do not edit: regenerate for each app release.
  * Capability versions for `manifest.requires` are in ./host-capabilities.json.
  *
@@ -2008,6 +2008,7 @@ export type HostSyncFlowReceipt = {
 	status: "completed" | "cancelled" | "external-opened";
 };
 export type HostSyncPort = {
+	/** Current sync state: backend, connection, progress, last cycle and last error code. */
 	snapshot(): Promise<HostSyncSnapshot>;
 	backlog(signal?: AbortSignal): Promise<{
 		events: number;
@@ -2015,7 +2016,17 @@ export type HostSyncPort = {
 	}>;
 	/** Explicit remote read. No email, account ID, keys, session or billing ticket. */
 	account(signal?: AbortSignal): Promise<HostSyncAccount | null>;
-	/** Uses the configured scheduler. Caller cancellation cannot stop a shared sync or undo its writes. */
+	/**
+	 * Runs one sync round on the configured backend — the relay or a plugin
+	 * transport such as WebDAV, including transports that only sync on request —
+	 * and resolves when that round has finished: `completed`, or
+	 * `already-running` when a round was in progress (it is not queued again).
+	 * Rejects with a coded `AppError` when no round can start (`ui/unavailable`
+	 * while sync is unsupported, disconnected, disabled or busy) and with the
+	 * round's error when it fails — classified failures carry a `sync/*` code
+	 * such as `sync/network` or `sync/unauthorized`. Caller cancellation cannot
+	 * stop a shared sync or undo its writes.
+	 */
 	requestSync(signal?: AbortSignal): Promise<HostSyncReceipt>;
 	/** Opens the host Data & Sync page, not an automatic login, disconnect or purchase. */
 	openSettings(signal?: AbortSignal): Promise<{
@@ -3353,6 +3364,12 @@ export type PluginManifest = {
 	 * Declarative settings: rendered by the app from the Plugins panel; edits
 	 * write through as one object under the plugin's storage key `settings`
 	 * (read with `ctx.services.storage.get("settings")`).
+	 *
+	 * Nothing is stored until the first save, so `get("settings")` starts as
+	 * null; declared `value`s are only what the form shows. A save from the
+	 * settings page writes every non-secret field; the agent and the settings
+	 * domain merge one field at a time (null resets it). Merge your defaults
+	 * over whatever is stored.
 	 */
 	settings?: PluginFormField[];
 	/**
@@ -3840,8 +3857,11 @@ export type PluginFormField = PluginFormFieldBase & ({
 	label: PluginText;
 	value?: number;
 	helperText?: PluginText;
+	/** Stored values are finite numbers within min/max on every write path
+	 * (the settings page enforces them in releases after 0.6.5; the agent always did). */
 	min?: number;
 	max?: number;
+	/** Input increment only; stored values are not rounded to it. */
 	step?: number;
 } | {
 	kind: "select";
@@ -4197,6 +4217,8 @@ export type PluginViewResult = void | undefined | null | {
 /** Where a selection action was triggered from. */
 export type SelectionActionSource = "selection" | "annotation" | "navigator";
 export type SelectionActionInput = {
+	/** The whole selected text with whitespace runs collapsed — never truncated. For the
+	 * annotation and navigator sources, the annotation's or navigator unit's text. */
 	text: string;
 	/** Surrounding passage when the reader can recover it. */
 	context?: string;
@@ -4231,7 +4253,9 @@ export type PluginActionStateReceipt = {
 export type PluginActionRegistration = PluginDisposable & {
 	updateState(state: PluginActionState): Promise<PluginActionStateReceipt>;
 };
-/** Selection/annotation menu entry. May run silently, report a toast or open a view. */
+/** Selection/annotation menu entry. May run silently, report a toast or open a view.
+ * It appears on every source (selection, annotation, navigator); branch on
+ * `input.source` inside `run` when an action only makes sense on some. */
 export type PluginSelectionAction = {
 	state?: PluginActionState;
 	id: string;
@@ -5640,11 +5664,22 @@ export type PluginHostServices = {
 	};
 	/** Requires service:sync; no keys, account identifiers, billing tickets or raw event access. */
 	sync?: Omit<HostSyncPort, "backlog" | "account" | "requestSync" | "openSettings" | "requestFlow"> & {
+		/** Events and blobs waiting to be pushed. */
 		backlog(): ReturnType<HostSyncPort["backlog"]>;
+		/** Explicit remote read of the account's tier, usage and limits; null without an account.
+		 * No email, account ID, keys, session or billing ticket. */
 		account(): ReturnType<HostSyncPort["account"]>;
+		/** Runs one sync round on the configured backend (relay or a transport plugin such as
+		 * WebDAV) and resolves when it has finished: `completed`, or `already-running` when a
+		 * round was in progress (not queued again). Rejects with a coded error when no round can
+		 * start (`ui/unavailable`) or the round fails (classified failures carry `sync/*` codes). */
 		requestSync(): ReturnType<HostSyncPort["requestSync"]>;
+		/** Opens the host Data & Sync page; not a login, disconnect or purchase. */
 		openSettings(): ReturnType<HostSyncPort["openSettings"]>;
+		/** Host-owned connect, disconnect, account deletion, upgrade or billing flow. Waits for the
+		 * final local outcome or external handoff; cancellation cannot undo a started operation. */
 		requestFlow(request: HostSyncFlowRequest, options?: PluginCallOptions): ReturnType<HostSyncPort["requestFlow"]>;
+		/** Delivers each new sync snapshot (state, progress, completed cycles) while the handle lives. */
 		observe(handler: PluginObservationHandler<HostSyncSnapshot>, options?: {
 			ruleId?: string;
 		}): PluginDisposable;
@@ -5851,7 +5886,13 @@ export type PluginContext = {
 	contributions: PluginContributions;
 	services: PluginHostServices;
 };
-/** The default export of a plugin's entry module. */
+/**
+ * The default export of a plugin's entry module — `migrate` and `services` are
+ * methods of this object, not named exports. It runs in a Worker with no DOM;
+ * the JavaScript floor is Chrome 107 / Safari 16 with ES2024 built-ins
+ * polyfilled. `Intl` APIs beyond that floor are whatever the system WebView
+ * provides, so feature-test them.
+ */
 export type PluginModule = {
 	activate(ctx: PluginContext): void | Promise<void>;
 	/** Runs without activate(), in a fresh realm with intersected permissions/settings/

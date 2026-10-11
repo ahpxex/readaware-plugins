@@ -67,7 +67,7 @@ upgrades and supported downgrades.
   "name": "My Plugin",
   "version": "0.1.0",
   "schemaVersion": 1,
-  "minAppVersion": "0.6.5",
+  "minAppVersion": "0.6.6",
   "requires": {
     "contributions": { "commands": "^1.1.0" },
     "services": { "storage": "^2.6.0", "network": "^2.2.0" }
@@ -127,8 +127,8 @@ upgrades and supported downgrades.
   storage-changed notification if you cache them. Nothing is stored until the
   first save (`get` returns `null`), and agent edits change one field at a
   time, so merge your defaults over the stored object. `number` fields store
-  numbers; ReadAware 0.6.5 enforces `min`/`max` only for agent edits, so clamp
-  in code. Fields can show
+  numbers within `min`/`max` (ReadAware 0.6.5 enforced them only for agent
+  edits, so clamp in code if you support 0.6.5). Fields can show
   conditionally per variant (`visibleWhen: { field, equals }` — hidden
   fields keep their stored values, so one settings object carries a value
   set per variant), and a `select` may resolve its options at runtime:
@@ -155,7 +155,7 @@ upgrades and supported downgrades.
   after launch when overdue — never at exact times, and never while the
   app is closed.
 - `minAppVersion` — the oldest ReadAware release you tested. Use the release
-  named in `types/host-capabilities.json` (currently 0.6.5) unless you have
+  named in `types/host-capabilities.json` unless you have
   tested older ones; it may not be newer than that release. `requires` is what
   the app actually enforces, so keep both truthful.
 

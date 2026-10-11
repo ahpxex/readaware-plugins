@@ -98,7 +98,7 @@ export default plugin;
   "name": "Word Count",
   "version": "0.1.0",
   "schemaVersion": 1,
-  "minAppVersion": "0.6.5",
+  "minAppVersion": "0.6.6",
   "requires": {
     "contributions": { "selectionActions": "^1.2.0" }
   },
@@ -141,9 +141,9 @@ export default plugin;
 - `settings`: declarative fields rendered as the plugin's settings page
   (`text`, `textarea`, `number`, `time`, `select`, `toggle`, `checkbox`,
   `choice`, `secret`). `secret` values go to `ctx.services.secrets` under the
-  field id. `number` values are stored as numbers; `min`/`max` are enforced
-  for the agent's edits, but in ReadAware 0.6.5 not on the settings page, so
-  clamp in code. `step` only shapes the input.
+  field id. `number` values are stored as numbers within `min`/`max` (ReadAware
+  0.6.5 enforced the bounds only for the agent's edits, so clamp in code if
+  the plugin supports 0.6.5). `step` only shapes the input.
 - `schedules`: `[{ "id", "label", "everyMinutes" }]` (at least 15), bound
   in `activate` with `ctx.services.schedules.bind(id, handler)`. Runs while
   the app is open only, never at exact times.
@@ -208,7 +208,7 @@ the outcome. `plugins/sync-now/manifest.json`:
   "name": "Sync Now",
   "version": "0.1.0",
   "schemaVersion": 1,
-  "minAppVersion": "0.6.5",
+  "minAppVersion": "0.6.6",
   "requires": {
     "contributions": { "commands": "^1.1.0" },
     "services": { "sync": "^1.2.0" }
@@ -266,7 +266,7 @@ round fails. Its registry entry:
   "description": "A Sync now command with a keyboard shortcut.",
   "author": "you",
   "permissions": ["service:sync"],
-  "minAppVersion": "0.6.5"
+  "minAppVersion": "0.6.6"
 }
 ```
 
