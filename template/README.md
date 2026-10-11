@@ -7,12 +7,14 @@ A commented TypeScript skeleton for a ReadAware plugin, with a test.
 1. In a checkout of this repository, run `bun install`, then copy this folder
    to `plugins/<your-plugin-id>/`. The folder name must equal the
    `manifest.json` `id` (lowercase letters, digits, hyphens).
-2. Edit `manifest.json` — id, name, description, `schemaVersion`,
+2. Rename `package.json`'s `name` to `readaware-plugin-<your-plugin-id>` and
+   replace this README with one about your plugin. Edit `manifest.json` — id, name, description, `schemaVersion`,
    permissions, and `requires` — and `src/main.ts`. Delete the mount points
    you don't need, then the permissions and `requires` entries they used.
    Capability versions for `requires` are in `types/host-capabilities.json`.
 3. Inside your folder: `bun run build` emits `main.js` (the module the app
-   loads), `bun test` runs `src/*.test.ts`, and `bun run check` typechecks.
+   loads), `bun test` runs `src/*.test.ts`, and `bun run typecheck` typechecks.
+   `bun run check` at the repository root runs everything CI runs.
 4. Install locally: ReadAware → Settings → Plugins → Install plugin…, choose
    your folder. Reinstall to pick up a new build.
 

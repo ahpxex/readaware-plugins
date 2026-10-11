@@ -10,6 +10,7 @@
     "check": "bun run validate && bun run typecheck && bun test && bun scripts/build.mjs --check"
   },
   "devDependencies": {
+    "@types/bun": "1.4.0",
     "semver": "7.8.5",
     "typescript": "~5.8.3"
   }

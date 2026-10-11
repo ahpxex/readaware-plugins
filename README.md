@@ -57,7 +57,8 @@ editorial-themes, webdav-sync), are the living examples of the full surface.
 
 Every manifest includes a positive integer `schemaVersion` for the plugin's
 private KV and document data. Change it only when that data shape changes, and
-export `migrate(storageOnlyContext, { fromVersion, toVersion, direction })` for
+give the default-exported module a
+`migrate(storageOnlyContext, { fromVersion, toVersion, direction })` method for
 upgrades and supported downgrades.
 
 ```json
@@ -100,7 +101,9 @@ upgrades and supported downgrades.
 - `permissions` — only what you use. Data permissions are
   `<domain>:read` / `<domain>:write` per domain (write implies read):
   `library` (books, source text, and collections), `reading` (navigation,
-  progress, and reading time), `annotations`, `conversations` (read-only).
+  progress, and reading time), `annotations`, `conversations` (`read` for
+  threads and transcripts; `write` to propose turns the user confirms, create
+  or select threads, stop and clear — never to write messages or summaries).
   `agent:tools` registers tools
   on the reading agent; `ui:themes` unlocks the declarative `themes`/`fonts`
   fields below; `sync:transport` lets the plugin provide a sync backend (a
@@ -121,7 +124,11 @@ upgrades and supported downgrades.
   never ask users to type a time. The app renders them as the plugin's own section in Settings
   and persists the values as ONE object under your storage key `settings`
   — read them with `ctx.services.storage.get("settings")`, and re-read on the
-  storage-changed notification if you cache them. Fields can show
+  storage-changed notification if you cache them. Nothing is stored until the
+  first save (`get` returns `null`), and agent edits change one field at a
+  time, so merge your defaults over the stored object. `number` fields store
+  numbers; ReadAware 0.6.5 enforces `min`/`max` only for agent edits, so clamp
+  in code. Fields can show
   conditionally per variant (`visibleWhen: { field, equals }` — hidden
   fields keep their stored values, so one settings object carries a value
   set per variant), and a `select` may resolve its options at runtime:

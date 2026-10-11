@@ -22,8 +22,5 @@
     "types",
     "plugins/*/src",
     "template/src"
-  ],
-  "exclude": [
-    "**/*.test.ts"
   ]
 }

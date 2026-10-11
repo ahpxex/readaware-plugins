@@ -23,13 +23,15 @@ an API that file does not list.
 ```bash
 bun install                                # once, at the repository root
 cp -R template plugins/<id>                # folder name == manifest id
+# rename package.json "name" to readaware-plugin-<id>; replace README.md with one about the plugin
 # edit plugins/<id>/manifest.json and plugins/<id>/src/main.ts
 cd plugins/<id> && bun run build && cd -   # writes plugins/<id>/main.js
 # add the registry.json entry (see Publishing)
 bun run check                              # validate, typecheck, test, bundle check
 ```
 
-`bun run check` is exactly what CI runs. Do not hand-edit `main.js` or any
+`bun run check` at the repository root is exactly what CI runs (inside a
+plugin folder, `bun run typecheck` and `bun test` cover just that plugin). Do not hand-edit `main.js` or any
 other plugin's files. With the Bun version in `.bun-version`, `bun run build`
 at the root rebuilds every plugin deterministically, so unchanged plugins stay
 byte-identical.
@@ -66,13 +68,20 @@ export default plugin;
   `ctx.services.sync`, `ctx.contributions.agentTools`, …) exist only when the
   manifest declares the permission that unlocks them; check for `undefined`.
 - Code runs in a Worker sandbox: no DOM, no `window`, no remote code loading.
-  Bundle pure-JS dependencies. Network bodies are strings or binary.
+  Bundle pure-JS dependencies. Network bodies are strings or binary. The
+  JavaScript floor is Chrome 107 / Safari 16 with ES2024 built-ins
+  polyfilled; feature-test anything newer, including `Intl` APIs such as
+  `Intl.Segmenter`.
 - `ctx.services.storage` is your namespaced key-value store. `get()` is
   synchronous; `set()`/`remove()` return promises that settle once durable —
-  await them. Declared settings arrive as one object under the key
-  `"settings"`. Structured records: `ctx.services.storage.collection(name)`.
-- Raise data-shape changes with `schemaVersion` and export
-  `migrate(ctx, { fromVersion, toVersion, direction })`.
+  await them. Structured records: `ctx.services.storage.collection(name)`.
+- Declared settings arrive as one object under the key `"settings"`, but
+  only after the first save: until then `get("settings")` is `null`, and the
+  declared `value`s exist only in the form. A save from the settings page
+  writes every field; the agent changes one field at a time. Always merge your
+  own defaults over what is stored.
+- Raise data-shape changes with `schemaVersion` and give the default-exported
+  module a `migrate(ctx, { fromVersion, toVersion, direction })` method.
 - Results returned by commands, actions and form submits: `{ toast }` (a
   string, or `{ kind: "error", code }` to show the host's localized message
   for a stable error code), `{ view }` to open a host-rendered view, or
@@ -132,7 +141,9 @@ export default plugin;
 - `settings`: declarative fields rendered as the plugin's settings page
   (`text`, `textarea`, `number`, `time`, `select`, `toggle`, `checkbox`,
   `choice`, `secret`). `secret` values go to `ctx.services.secrets` under the
-  field id.
+  field id. `number` values are stored as numbers; `min`/`max` are enforced
+  for the agent's edits, but in ReadAware 0.6.5 not on the settings page, so
+  clamp in code. `step` only shapes the input.
 - `schedules`: `[{ "id", "label", "everyMinutes" }]` (at least 15), bound
   in `activate` with `ctx.services.schedules.bind(id, handler)`. Runs while
   the app is open only, never at exact times.
@@ -158,6 +169,15 @@ ctx.contributions.commands.register({
 - Pick a chord absent from `builtInShortcuts`. If two shortcuts share a chord,
   pressing it runs neither until the user rebinds one.
 - Shortcuts do not fire while the user is typing in a text field.
+
+## Selection actions
+
+`ctx.contributions.selectionActions.register(...)` adds an entry to the
+reader's selection menu. `input.text` is the whole selection with whitespace
+collapsed, never truncated; `input.context` is a bounded excerpt around it.
+The entry also appears on highlight menus and the sentence navigator
+(`input.source` is `"selection"`, `"annotation"` or `"navigator"`); there is no
+way to limit where it shows, so branch on `input.source` in `run` if needed.
 
 ## Views and icons
 
