@@ -2,10 +2,18 @@
  * Registry validation — run on every pull request. Fails loudly with every
  * problem it finds rather than stopping at the first.
  *
+ * The host contract comes from types/host-capabilities.json — generated from
+ * the latest ReadAware release together with types/plugin-api.d.ts — so these
+ * checks follow the release instead of a hand-kept list.
+ *
  * Checks:
  *  - registry.json parses, has a `plugins` array, no duplicate ids
  *  - every registry entry has id/name/version, a valid id shape, and
  *    known permissions only
+ *  - every manifest (and template/manifest.json) declares `requires` that the
+ *    latest release satisfies, with the permission each capability needs, a
+ *    `minAppVersion` no newer than that release, and `networkAccess` origins
+ *    exactly when it uses `service:network` — what the app checks at install
  *  - every entry's folder exists with a manifest.json whose id/version/name
  *    match the registry listing; the entry module and any extra `files` exist
  *  - theme/font declarations (`ui:themes`) pass the same grammars the app
@@ -13,30 +21,18 @@
  *    known app tokens, and font files that exist AND are fetchable (listed
  *    in the registry entry's `files`)
  *  - every folder under plugins/ is listed in the registry (no orphans)
+ *  - manifest examples in README.md, AGENTS.md and template/README.md pass
+ *    the same contract checks, so the docs cannot drift from the release
  */
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import semver from "semver";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const KNOWN_PERMISSIONS = new Set([
-  "ui:themes",
-  "library:read",
-  "library:write",
-  "reading:read",
-  "reading:write",
-  "annotations:read",
-  "annotations:write",
-  "conversations:read",
-  "agent:tools",
-  "agent:context",
-  "agent:retrieval",
-  "agent:memory",
-  "service:network",
-  "service:llm",
-  "service:clipboard",
-  "sync:transport",
-]);
+const RELEASE = JSON.parse(readFileSync(join(ROOT, "types/host-capabilities.json"), "utf8"));
+const KNOWN_PERMISSIONS = new Set(RELEASE.permissions);
+const SEMVER = { includePrerelease: true };
 const SETTINGS_PATH_PATTERN =
   /^[a-z][a-zA-Z0-9-]*(?:\.[a-z][a-zA-Z0-9-]*)*(?:\.\*)?$/;
 
@@ -77,11 +73,8 @@ const isThemeColor = (value) =>
   value.length <= 64 &&
   (HEX_COLOR.test(value) || FUNC_COLOR.test(value));
 const FONT_PATH = /^(?!\.)[A-Za-z0-9._-]+(\/(?!\.)[A-Za-z0-9._-]+)*\.(woff2|woff|ttf|otf)$/i;
-const APP_THEME_TOKENS = new Set([
-  "paper", "paperWarm", "border", "fg", "fgMuted", "fgSubtle", "inverseFg",
-  "surface", "fill", "fillStrong", "borderStrong", "mainSurface", "scrollbar",
-]);
-const READER_PALETTE_KEYS = ["bg", "text", "selection", "rule", "faint", "muted"];
+const APP_THEME_TOKENS = new Set(RELEASE.themeTokens.app);
+const READER_PALETTE_KEYS = RELEASE.themeTokens.readerPalette;
 const FONT_SIZES = new Set([
   "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large",
 ]);
@@ -210,6 +203,74 @@ function checkThemeContributions(id, manifest, listedFiles) {
 const problems = [];
 const problem = (message) => problems.push(message);
 
+/** The checks the app runs before activating a plugin, against the latest release. */
+function checkHostContract(where, manifest) {
+  const app = RELEASE.appVersion;
+  const declared = new Set(manifest.permissions ?? []);
+  for (const permission of declared) {
+    if (!KNOWN_PERMISSIONS.has(permission)) problem(`${where}: unknown permission "${permission}"`);
+  }
+  if (manifest.minAppVersion != null) {
+    if (typeof manifest.minAppVersion !== "string" || !semver.valid(manifest.minAppVersion)) {
+      problem(`${where}: minAppVersion must be a version such as "${app}"`);
+    } else if (semver.gt(manifest.minAppVersion, app)) {
+      problem(`${where}: minAppVersion ${manifest.minAppVersion} is newer than the latest release ${app}`);
+    }
+  }
+  const requires = manifest.requires;
+  if (typeof requires !== "object" || requires === null || Array.isArray(requires)) {
+    problem(`${where}: manifest.requires must be an object (versions: types/host-capabilities.json)`);
+  } else {
+    for (const [family, entries] of Object.entries(requires)) {
+      const catalog = RELEASE.capabilities[family];
+      if (!catalog) {
+        problem(`${where}: requires.${family} is not a capability family in ReadAware ${app}`);
+        continue;
+      }
+      for (const [id, range] of Object.entries(entries ?? {})) {
+        const capability = catalog[id];
+        const name = `requires.${family}.${id}`;
+        if (!capability) {
+          problem(`${where}: ${name} is not available in ReadAware ${app}`);
+          continue;
+        }
+        if (typeof range !== "string" || !semver.validRange(range, SEMVER)) {
+          problem(`${where}: ${name} must be a semver range such as "^${capability.version}"`);
+          continue;
+        }
+        if (!semver.satisfies(capability.version, range, SEMVER)) {
+          problem(
+            semver.gtr(capability.version, range, SEMVER)
+              ? `${where}: ${name} "${range}" targets an older contract; ReadAware ${app} ships ${capability.version} — update the code for it and require "^${semver.major(capability.version)}.${semver.minor(capability.version)}.0"`
+              : `${where}: ${name} "${range}" needs a newer ReadAware than ${app}, which ships ${capability.version}`,
+          );
+        }
+        if (capability.permissions.length && !capability.permissions.some((permission) => declared.has(permission))) {
+          problem(`${where}: ${name} needs the ${capability.permissions.join(" or ")} permission`);
+        }
+      }
+    }
+  }
+  const origins = manifest.networkAccess?.origins;
+  if (declared.has("service:network")) {
+    const canonical = (origin) => {
+      try {
+        const url = new URL(origin);
+        return ["http:", "https:"].includes(url.protocol) && [url.origin, `${url.origin}/`].includes(origin);
+      } catch {
+        return false;
+      }
+    };
+    const valid =
+      Array.isArray(origins) &&
+      origins.length <= 32 &&
+      ((origins.length === 1 && origins[0] === "*") || origins.every((origin) => typeof origin === "string" && canonical(origin)));
+    if (!valid) problem(`${where}: service:network needs networkAccess.origins — canonical http(s) origins, or ["*"]`);
+  } else if (manifest.networkAccess != null) {
+    problem(`${where}: networkAccess is only allowed with the service:network permission`);
+  }
+}
+
 let registry;
 try {
   registry = JSON.parse(readFileSync(join(ROOT, "registry.json"), "utf8"));
@@ -240,12 +301,6 @@ for (const entry of registry.plugins) {
   }
   if (seen.has(entry.id)) problem(`${label}: duplicate id`);
   seen.add(entry.id);
-
-  for (const permission of entry.permissions ?? []) {
-    if (!KNOWN_PERMISSIONS.has(permission)) {
-      problem(`${label}: unknown permission "${permission}"`);
-    }
-  }
 
   const dir = join(ROOT, "plugins", entry.id);
   if (!existsSync(dir) || !statSync(dir).isDirectory()) {
@@ -282,6 +337,7 @@ for (const entry of registry.plugins) {
     problem(`plugins/${entry.id}: registry permissions must equal manifest.permissions`);
   }
   checkSettingsAccess(entry.id, manifest);
+  checkHostContract(`plugins/${entry.id}`, manifest);
 
   const main = typeof manifest.main === "string" ? manifest.main : "main.js";
   for (const file of [main, ...(entry.files ?? [])]) {
@@ -309,9 +365,34 @@ for (const entry of registry.plugins) {
 const pluginsDir = join(ROOT, "plugins");
 for (const folder of existsSync(pluginsDir) ? readdirSync(pluginsDir) : []) {
   if (folder.startsWith(".")) continue;
-  if (folder.startsWith(".")) continue;
   if (!seen.has(folder)) {
     problem(`plugins/${folder}/ exists but is not listed in registry.json`);
+  }
+}
+
+// The template is what new plugins start from: it must pass the same contract.
+try {
+  const template = JSON.parse(readFileSync(join(ROOT, "template/manifest.json"), "utf8"));
+  checkSettingsAccess("template", template);
+  checkHostContract("template", template);
+} catch (error) {
+  problem(`template/manifest.json is missing or invalid: ${error.message}`);
+}
+
+// Manifest examples in the docs are copied verbatim; hold them to the same contract.
+for (const doc of ["README.md", "AGENTS.md", "template/README.md"]) {
+  const text = readFileSync(join(ROOT, doc), "utf8");
+  for (const [index, block] of [...text.matchAll(/```json\n([\s\S]*?)```/g)].entries()) {
+    let example;
+    try {
+      example = JSON.parse(block[1]);
+    } catch {
+      continue; // fragments such as a single field are illustrations, not manifests
+    }
+    if (example && typeof example === "object" && "requires" in example) {
+      checkSettingsAccess(`${doc} example ${index + 1}`, example);
+      checkHostContract(`${doc} example ${index + 1}`, example);
+    }
   }
 }
 

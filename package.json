@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "validate": "node scripts/validate.mjs",
+    "validate": "bun scripts/validate.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "build": "for dir in plugins/*/src; do id=$(basename $(dirname $dir)); bun build plugins/$id/src/main.ts --outfile plugins/$id/main.js --format esm; done"
+    "build": "bun scripts/build.mjs",
+    "check": "bun run validate && bun run typecheck && bun test && bun scripts/build.mjs --check"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "semver": "7.8.5",
+    "typescript": "~5.8.3"
   }
 }

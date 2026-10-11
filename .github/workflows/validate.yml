@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-      - run: node scripts/validate.mjs
-      - run: npx -y -p typescript@5 tsc --noEmit
+          # The committed bundles are checked byte-for-byte; build with this Bun.
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      # validate, typecheck, test, and committed main.js == fresh build
+      - run: bun run check

@@ -7,34 +7,51 @@ AI-native reading app. Plugins listed here appear in the app under
 Submissions work like Raycast's extension repo: **your plugin lives in this
 repository** and lands via pull request.
 
+**Building with a coding agent?** Hand it this repository and
+[`AGENTS.md`](AGENTS.md) — the complete authoring guide in one file.
+
+## What the app supports
+
+`types/` describes one ReadAware release, generated from that release's
+source and named in its header:
+
+- `types/plugin-api.d.ts` — the whole plugin contract, self-contained. Import
+  it as `@readaware/plugin-api` (mapped in `tsconfig.json`), types only.
+- `types/host-capabilities.json` — every capability the release offers with
+  its version and required permission, the icon names contributions accept,
+  and the built-in shortcut chords. Choose `requires` ranges from it.
+
+Both are refreshed for every app release; the validator checks every manifest
+against them, so a plugin that passes CI activates on that release.
+
 ## Submitting a plugin
 
-**TypeScript is the recommended authoring path** — copy `template/`, write
-`src/main.ts` against the typed API in `types/plugin-api.d.ts`, and build
-with `bun run build` (or `bun build src/main.ts --outfile main.js --format
-esm`). What ships is always the built `main.js`; plain JavaScript is equally
-accepted if you prefer it.
+TypeScript is the authoring path: `src/main.ts` is bundled into the
+self-contained `main.js` the app loads (plain JavaScript in `src/main.ts`
+works too). Use Bun — the version in `.bun-version`.
 
-1. Fork this repository.
-2. Copy `template/` to `plugins/<your-plugin-id>/` (or create the folder by
-   hand) containing at least:
-   - `manifest.json` — see the format below
-   - `main.js` — a single self-contained ES module (the build output when
-     authoring in TypeScript; keep `src/` committed so the code is reviewable)
-3. Add a matching entry to `registry.json` (keep the array sorted by id).
-4. Run `node scripts/validate.mjs` and `npx tsc --noEmit` locally — CI runs
-   the same checks on your PR.
-5. Open a pull request describing what the plugin does and which permissions
+1. Fork this repository and run `bun install`.
+2. Copy `template/` to `plugins/<your-plugin-id>/` — the folder name must
+   equal the manifest `id`. Edit `manifest.json` and `src/main.ts`.
+3. Build with `bun run build` (all plugins) or `bun run build` inside your
+   folder (just yours), and commit both `src/` and the built `main.js`.
+4. Add a matching entry to `registry.json` (sorted by id; `permissions` equal
+   to the manifest's; `files` for any extra assets).
+5. Run `bun run check` — validate, typecheck, tests, and a rebuild that must
+   match the committed `main.js`. CI runs exactly this on your PR.
+6. Open a pull request describing what the plugin does and which permissions
    it needs and why.
 
 Updates are the same flow: bump `version` in both `manifest.json` and
 `registry.json` in one PR.
 
-Start from `template/` — a commented TypeScript skeleton with the build
-script wired up (`bun run build` emits `main.js`). `plugins/theme-schedule/` here, and the bundled
-first-party plugins in the app repository (`plugins/` there: dictionary,
-rss-reader, tts, sentence-reader, editorial-themes), are the living examples
-of the full surface.
+To try a plugin before publishing, open ReadAware → Settings → Plugins →
+Install plugin… and choose your plugin folder; reinstall after each build.
+
+`template/` is a commented TypeScript skeleton with a test.
+`plugins/theme-schedule/` here, and the bundled first-party plugins in the app
+repository (`plugins/` there: dictionary, rss-reader, tts, sentence-reader,
+editorial-themes, webdav-sync), are the living examples of the full surface.
 
 ## manifest.json
 
@@ -49,14 +66,15 @@ upgrades and supported downgrades.
   "name": "My Plugin",
   "version": "0.1.0",
   "schemaVersion": 1,
-  "minAppVersion": "0.3.0",
+  "minAppVersion": "0.6.5",
   "requires": {
-    "contributions": { "commands": "^1.0.0" },
-    "services": { "storage": "^1.0.0" }
+    "contributions": { "commands": "^1.1.0" },
+    "services": { "storage": "^2.6.0", "network": "^2.2.0" }
   },
   "description": "One sentence about what it does.",
   "author": "you",
   "permissions": ["service:network"],
+  "networkAccess": { "origins": ["https://api.example.com"] },
   "main": "main.js",
   "settings": [
     {
@@ -74,6 +92,11 @@ upgrades and supported downgrades.
 
 - `id` — lowercase letters, digits, hyphens (max 64 chars); must equal the
   folder name.
+- `requires` — every domain, contribution, service and schema the code uses,
+  each with a semver range the target release satisfies. Copy the versions
+  from `types/host-capabilities.json`; a range the release has outgrown (for
+  example `storage: "^1.0.0"` after storage 2.0) makes the app refuse to
+  activate the plugin, and the validator reports it.
 - `permissions` — only what you use. Data permissions are
   `<domain>:read` / `<domain>:write` per domain (write implies read):
   `library` (books, source text, and collections), `reading` (navigation,
@@ -87,6 +110,9 @@ upgrades and supported downgrades.
   `service:network`, `service:llm`
   (supports structured JSON output via `schema`), and `service:clipboard`.
   Users see every declared permission before installing.
+- `networkAccess` — with `service:network`, the exact origins the plugin may
+  reach (`https://host[:port]`, no paths), or `["*"]` for any; users see them
+  before installing.
 - `main` — the entry module, default `main.js`.
 - `settings` — optional declarative settings (field kinds: `text`,
   `textarea`, `number`, `time`, `select`, `toggle`, `checkbox`, `choice`,
@@ -121,10 +147,10 @@ upgrades and supported downgrades.
   LEAST every `everyMinutes` while the app is open and catches up shortly
   after launch when overdue — never at exact times, and never while the
   app is closed.
-- `minAppVersion` — bump it when you use a recently added capability
-  (`secret`/`visibleWhen`/`dynamicOptions` fields, localized field copy,
-  schedules, voice providers): an older app rejects the unknown manifest
-  shapes with a readable error instead of half-working.
+- `minAppVersion` — the oldest ReadAware release you tested. Use the release
+  named in `types/host-capabilities.json` (currently 0.6.5) unless you have
+  tested older ones; it may not be newer than that release. `requires` is what
+  the app actually enforces, so keep both truthful.
 
 ## Themes and bundled fonts (`ui:themes`)
 
@@ -249,8 +275,14 @@ export default {
       view: async () => ({ kind: "list", items: [] }),
     });
 
-    // Command palette
-    ctx.contributions.commands.register({ id: "hello", title: "My Plugin: hello", run: () => {} });
+    // Command palette — optionally with a default key binding the user can
+    // rebind in Settings → Shortcuts
+    ctx.contributions.commands.register({
+      id: "hello",
+      title: "My Plugin: hello",
+      defaultShortcut: { key: "h", mod: true, alt: true },
+      run: () => ({ toast: "Hello" }),
+    });
 
     // Data domains — reads, event subscriptions, and (with the write
     // permission) commands issued through the app's own event-sourced
@@ -282,24 +314,33 @@ so registering unconditionally is fine. Pair it with `service:network`
 for cloud or local engines and `secret` settings fields (read back via
 `ctx.services.secrets`) for API keys — see the first-party `tts` plugin.
 
-UI is declarative only — view kinds `markdown`, `list`, `form`, and the
-compositional `blocks`, rendered by the app's design system. A list item or
-form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
-or `{ close: true }`. Icons are picked by name from the app's curated
-Phosphor set. Persistent state goes through `ctx.services.storage` (namespaced
-key-value; `ctx.services.storage.onChange(fn)` fires when your namespace is written
-from outside the plugin — its settings page, the agent — so cached settings
-can be re-read).
+Command shortcuts: `defaultShortcut` is a chord (`key` plus optional `mod` —
+⌘ on macOS, Ctrl elsewhere — `alt`, `shift`). Avoid the chords in
+`builtInShortcuts` of `types/host-capabilities.json`: when two shortcuts share
+a chord, pressing it runs neither until the user rebinds one in Settings →
+Shortcuts. Every command is bindable there, with or without a default.
 
-The full contract is `types/plugin-api.d.ts` in this repository (a mirror of
-`packages/plugin-types` in the app repository).
+UI is declarative only — view kinds `markdown`, `list`, `table`, `tree`,
+`image`, `editor`, `form`, `detail`, and the compositional `blocks`, rendered
+by the app's design system. A list item or
+form submit may return `{ view }` to chain deeper, `{ toast }` for a notice,
+or `{ close: true }`. Icons are picked by name from `icons` in
+`types/host-capabilities.json`; any other name renders as a puzzle piece.
+Persistent state goes through `ctx.services.storage` (namespaced key-value;
+`set()` and `remove()` return promises that settle once the write is durable,
+so await them; `ctx.services.storage.onChange(fn)` fires when your namespace
+is written from outside the plugin — its settings page, the agent — so cached
+settings can be re-read).
+
+The full contract is `types/plugin-api.d.ts`, generated from the release
+named in its header (`packages/plugin-types` in the app repository).
 
 ## Review expectations
 
 - Declare the minimum permissions; PRs asking for more than the code uses
   will be sent back.
-- `main.js` must be readable (or accompanied by a link to the source it was
-  bundled from).
+- `main.js` must be built from the committed `src/` with `bun run build`
+  (CI rebuilds and compares); keep it unminified so it stays readable.
 - No obfuscated code, no analytics/tracking, no remote code loading.
 
 Plugins run inside the app with the same access as the app itself —

@@ -3,7 +3,7 @@
  * those); everything the plugin itself says at runtime — option labels,
  * command titles, toasts — is resolved here against `ctx.locale`.
  */
-import type { PluginLocalizedText } from "../../../types/plugin-api";
+import type { PluginLocalizedText } from "@readaware/plugin-api";
 
 type Bundle = Record<string, string>;
 

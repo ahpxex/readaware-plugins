@@ -1,4 +1,4 @@
-// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/schedule.ts
+// plugins/theme-schedule/src/schedule.ts
 var KEEP = "keep";
 var SLOT_IDS = ["day", "night"];
 var DEFAULT_SETTINGS = {
@@ -77,7 +77,7 @@ function minuteOfDay(now) {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/strings.ts
+// plugins/theme-schedule/src/strings.ts
 var STRINGS = {
   en: {
     keep: "Keep current",
@@ -180,7 +180,7 @@ function text(key) {
   };
 }
 
-// ../../../../private/tmp/readaware-marketplace-cambria/plugins/theme-schedule/src/main.ts
+// plugins/theme-schedule/src/main.ts
 var MAX_SLEEP_MS = 60000;
 var MIN_SLEEP_MS = 1000;
 function settingsOf(ctx) {

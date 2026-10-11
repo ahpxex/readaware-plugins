@@ -10,7 +10,13 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@readaware/plugin-api": [
+        "types/plugin-api.d.ts"
+      ]
+    }
   },
   "include": [
     "types",

@@ -20,7 +20,7 @@ import type {
   PluginContext,
   PluginModule,
   PluginSelectOption,
-} from "../../../types/plugin-api";
+} from "@readaware/plugin-api";
 import {
   KEEP,
   SLOT_IDS,

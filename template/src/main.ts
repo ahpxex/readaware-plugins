@@ -5,15 +5,17 @@
  * file (dependencies included) into `main.js`, which is what the app loads.
  * Type imports are erased at build time, so typing costs nothing at runtime.
  *
- * The full contract lives in `types/plugin-api.d.ts` — every mount point,
- * view kind, and context capability is documented there. Delete what you
- * don't use below, and remove the matching permissions from `manifest.json`
- * (reviews ask for the minimum).
+ * The full contract lives in `types/plugin-api.d.ts` (imported below as
+ * `@readaware/plugin-api`) — every mount point, view kind, and context
+ * capability is documented there, generated from the ReadAware release named
+ * in its header. Delete what you don't use below, then remove the matching
+ * permissions and `requires` entries from `manifest.json` (reviews ask for the
+ * minimum). AGENTS.md at the repository root is the complete authoring guide.
  *
  * Plugins run in a Worker sandbox: no DOM APIs (bundle a pure-JS parser if
  * you need one), and network-service bodies must be strings or binary.
  */
-import type { PluginContext, PluginModule } from "../../types/plugin-api";
+import type { PluginContext, PluginModule } from "@readaware/plugin-api";
 
 /** Declared settings arrive as ONE object under the storage key "settings". */
 type Settings = {
@@ -32,12 +34,15 @@ const plugin: PluginModule = {
       throw new Error("My Plugin requires library:read and reading:write");
     }
     // ── Command palette ──────────────────────────────────────────────────
-    // The cheapest mount point: reachable from anywhere, bindable in
-    // Settings → Shortcuts. Return { toast } for a notice or { view } to
-    // open a host-rendered view.
+    // The cheapest mount point: reachable from anywhere and bindable in
+    // Settings → Shortcuts. `defaultShortcut` is optional; pick a chord that
+    // no built-in uses (types/host-capabilities.json → builtInShortcuts) —
+    // a chord two shortcuts share runs neither until the user rebinds one.
+    // Return { toast } for a notice or { view } to open a host-rendered view.
     ctx.contributions.commands.register({
       id: "hello",
       title: "My Plugin: hello",
+      defaultShortcut: { key: "h", mod: true, alt: true },
       run: () => ({
         toast: `${settings(ctx).greeting ?? "Hello"} from ${ctx.manifest.name}!`,
       }),

@@ -16,9 +16,10 @@ anything it stores.
 1. Enable the plugin, then open its settings and fill in the server URL,
    username, password, and the folder to store data under (created if
    missing). Many providers require an app-specific password for WebDAV.
-2. Go to Settings → Plugin Sync and select WebDAV. Connect to check the
-   server and enter the encryption passphrase. Use **Sync now** whenever you
-   want to synchronize; plugin transports do not sync automatically.
+2. In the same settings page (Settings → WebDAV Sync), connect to check the
+   server and enter the encryption passphrase. Use **Sync now** there
+   whenever you want to synchronize; plugin transports do not sync
+   automatically.
 3. Repeat on every device with the same server and passphrase.
 
 Using the WebDAV backend and a ReadAware account are mutually exclusive —
