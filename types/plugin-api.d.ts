@@ -1,7 +1,7 @@
 /**
- * ReadAware plugin API — the public contract of ReadAware 0.6.7.
+ * ReadAware plugin API — the public contract of ReadAware 0.6.8.
  *
- * GENERATED from ahpxex/read-aware at v0.6.7 (b732e07dd511) by
+ * GENERATED from ahpxex/read-aware at v0.6.8 (3da6800c3faf) by
  * scripts/sync-plugin-dts.ts. Do not edit: regenerate for each app release.
  * Capability versions for `manifest.requires` are in ./host-capabilities.json.
  *
@@ -48,6 +48,12 @@ export interface DictionaryEntrySnapshot {
 	etymology?: string;
 	contextualMeaning?: string;
 }
+/**
+ * Font containers the import accepts, detected from magic bytes — never
+ * from the file's extension. `ttc` is a TrueType/OpenType collection; the
+ * reader renders its first face, which is also the face metadata describes.
+ */
+export type UserFontFormat = "ttf" | "otf" | "ttc" | "woff" | "woff2";
 export type BookRemovalCleanupQuery = {
 	after?: string;
 	limit?: number;
@@ -959,6 +965,8 @@ export interface BookSummary {
 	/** Original import file name/size; absent on virtual books. */
 	fileName?: string;
 	fileSize?: number;
+	/** Folder-relative origin of a folder import (`Books/Sci-fi/Dune.epub`); absent otherwise. */
+	sourcePath?: string;
 	/**
 	 * Digest organization (people/events versus concepts), written
 	 * by the idle classification pipeline. Absent = not yet classified.
@@ -1171,7 +1179,7 @@ declare const DOMAIN_CATALOG: {
 		];
 	};
 	readonly settings: {
-		readonly version: "1.10.0";
+		readonly version: "1.11.0";
 		readonly pluginAccess: readonly [
 		];
 	};
@@ -1219,6 +1227,10 @@ declare const CONTRIBUTION_CATALOG: {
 		readonly version: "1.0.0";
 		readonly permission: null;
 	};
+	readonly settingsPage: {
+		readonly version: "1.0.0";
+		readonly permission: null;
+	};
 	readonly voiceProviders: {
 		readonly version: "1.0.0";
 		readonly permission: null;
@@ -1248,7 +1260,7 @@ declare const CONTRIBUTION_CATALOG: {
 		readonly permission: "agent:memory";
 	};
 	readonly themes: {
-		readonly version: "1.0.0";
+		readonly version: "1.2.0";
 		readonly permission: "ui:themes";
 	};
 	readonly fonts: {
@@ -1312,7 +1324,7 @@ declare const HOST_SERVICE_CATALOG: {
 		readonly permission: null;
 	};
 	readonly resources: {
-		readonly version: "1.5.0";
+		readonly version: "1.6.0";
 		readonly permission: null;
 	};
 	readonly sync: {
@@ -1466,6 +1478,18 @@ export interface DomainEventEnvelope<T extends string = string, P = unknown> {
 	/** Event-specific data. */
 	payload: P;
 }
+/**
+ * Where a text-unit reading mode (sentence-by-sentence, paragraph-by-paragraph)
+ * rests within the reading position it was observed with. The CFI addresses
+ * content, so any device holding the same `contentVersion` can resume on the
+ * unit that contains it, whichever mode or unit it reads with.
+ */
+export type ReadingModeResume = {
+	modeKey: string;
+	unitId: string;
+	contentVersion: string;
+	cfi: string;
+};
 export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 	restoreId: Id;
 	index: number;
@@ -1489,6 +1513,12 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 	sourceBlobKey: string;
 	/** Content hash for reliable duplicate-import detection. */
 	sourceSha256?: string;
+	/**
+	 * Where a folder import found the file: the picked folder's name and
+	 * the path below it, `/`-separated (`Books/Sci-fi/Dune.epub`). Never an
+	 * absolute device path. Absent for single-file imports — additive field.
+	 */
+	sourcePath?: string;
 }> | DomainEventEnvelope<"book.metadataEdited", {
 	bookId: Id;
 	title?: string;
@@ -1598,6 +1628,42 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 }> | DomainEventEnvelope<"book.removedFromCollection", {
 	bookId: Id;
 	collectionId: Id;
+}>
+/**
+ * A font file the user imported into the app — how mobile gets custom
+ * fonts (mobile platforms cannot enumerate installed families). `fontId`
+ * is the file's content hash: the same file imported on two devices is
+ * the same font, so concurrent imports converge on one row and replay is
+ * idempotent. `name` is the family/display name parsed from the font's
+ * name table — never the file name. Applying the event also leaves a
+ * `blob_objects` manifest row for `blobKey`, so a fresh device learns the
+ * bytes exist before they arrive.
+ */
+ | DomainEventEnvelope<"userFont.imported", {
+	fontId: Id;
+	name: string;
+	format: UserFontFormat;
+	/** Original picked file name (display secondary/diagnostics). */
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	sha256: string;
+	/** Blob key of the font bytes (`userfont:<sha256>`). */
+	blobKey: string;
+	/** OS/2 usWeightClass of the default instance (100–900). */
+	weight: number;
+	/** Variable fonts: the fvar `wght` axis upper bound, when present. */
+	weightMax?: number;
+	italic: boolean;
+}>
+/**
+ * The user removed an imported font. `blobKey` rides along so the log
+ * stays self-contained even though the cleanup trigger captures the same
+ * key from the deleted projection row.
+ */
+ | DomainEventEnvelope<"userFont.removed", {
+	fontId: Id;
+	blobKey: string;
 }> | DomainEventEnvelope<"book.progressed", {
 	bookId: Id;
 	/** Format-neutral position (EPUB CFI or PDF locator). */
@@ -1653,6 +1719,11 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 		totalLocations?: number;
 		progressPercent?: number;
 		status?: ReadingStatus;
+		/** The reading mode's resting unit at this observation, so the
+		 *  mode resumes in step with the position on every device. Null:
+		 *  observed with no resting unit (mode off). Absent: recorded by a
+		 *  build that predates the field — unknown. */
+		readingMode?: ReadingModeResume | null;
 	};
 }> | DomainEventEnvelope<"highlight.created", {
 	highlightId: Id;
@@ -2931,7 +3002,7 @@ export type SettingKind = "boolean" | "enum" | "string" | "integer" | "number" |
 export interface SettingOption {
 	value: SettingValue;
 	label: string;
-	source?: "builtin" | "plugin" | "system";
+	source?: "builtin" | "plugin" | "system" | "user";
 	pluginName?: string;
 	polarity?: "light" | "dark";
 }
@@ -3599,7 +3670,9 @@ export type PluginAction = {
 	 * inline as labeled buttons; `secondary` ones fold into the host's "More"
 	 * menu. Unset actions fill the remaining inline slots in declaration order
 	 * (a `solid` action counts as primary), so a view should mark at most two
-	 * actions primary and leave housekeeping such as refresh secondary.
+	 * actions primary and leave housekeeping such as refresh secondary. A lone
+	 * overflow action renders inline at its declaration position — the menu
+	 * never holds a single action.
 	 */
 	priority?: "primary" | "secondary";
 	/**
@@ -5368,7 +5441,42 @@ export type PluginUriHandler = {
 	state?: PluginActionState;
 	open(request: PluginUriRequest): PluginViewResult | Promise<PluginViewResult>;
 };
+/** Runtime theme images are owned private assets, never URLs or CSS. The host
+ * decodes a bounded raster copy. Only selecting this theme applies it. */
+export type PluginRuntimeTheme = PluginThemeContribution & {
+	readerBackground?: {
+		assetKey: string;
+		assetRevision: string;
+		/** 0 = invisible, 1 = opaque. */
+		opacity: number;
+		/** Black overlay on the image only: 0 = unchanged, 1 = black. */
+		dim: number;
+	};
+};
+/** A snapshot of a selectable base's palette and typography, without image
+ * URLs or assets. Fonts remain references to their owning plugin. */
+export type PluginReaderThemeBase = {
+	ref: string;
+	name: PluginText;
+	polarity: PluginThemePolarity;
+	reader: NonNullable<PluginThemeContribution["reader"]>;
+};
 export type PluginContributions = {
+	/** One custom settings page per plugin. Uses the ordinary declarative view
+	 * renderer, with the same activation/callback ownership as header actions. */
+	settingsPage?: {
+		register(page: {
+			view(): PluginView | Promise<PluginView>;
+		}): PluginDisposable;
+	};
+	/** Themes 1.1: staged, activation-owned themes; replacing an id replaces its
+	 * image too. Invalid/missing assets reject before replacing the live theme. */
+	themes?: {
+		/** Themes 1.2: built-in and active plugin reader bases, excluding image
+		 * themes. Saved copies do not change when the original theme changes. */
+		readerBases(): Promise<PluginReaderThemeBase[]>;
+		register(theme: PluginRuntimeTheme): Promise<PluginDisposable>;
+	};
 	uriHandlers: {
 		register(handler: PluginUriHandler): PluginActionRegistration;
 	};
