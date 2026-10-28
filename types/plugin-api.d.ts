@@ -1,7 +1,7 @@
 /**
- * ReadAware plugin API — the public contract of ReadAware 0.6.8.
+ * ReadAware plugin API — the public contract of ReadAware 0.6.9.
  *
- * GENERATED from ahpxex/read-aware at v0.6.8 (3da6800c3faf) by
+ * GENERATED from ahpxex/read-aware at v0.6.9 (45f20f06f228) by
  * scripts/sync-plugin-dts.ts. Do not edit: regenerate for each app release.
  * Capability versions for `manifest.requires` are in ./host-capabilities.json.
  *
