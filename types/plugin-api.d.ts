@@ -1,7 +1,7 @@
 /**
- * ReadAware plugin API — the public contract of ReadAware 0.6.9.
+ * ReadAware plugin API — the public contract of ReadAware 0.6.10.
  *
- * GENERATED from ahpxex/read-aware at v0.6.9 (45f20f06f228) by
+ * GENERATED from ahpxex/read-aware at v0.6.10 (319bae2f549f) by
  * scripts/sync-plugin-dts.ts. Do not edit: regenerate for each app release.
  * Capability versions for `manifest.requires` are in ./host-capabilities.json.
  *
@@ -1359,6 +1359,16 @@ declare const DECLARATIVE_SCHEMA_CATALOG: {
 };
 export type DeclarativeSchemaId = keyof typeof DECLARATIVE_SCHEMA_CATALOG;
 export type PluginPermission = Exclude<DomainPermission | ContributionPermission | HostServicePermission, "reader:modes">;
+export type BookmarkKind = "location" | "selection";
+/** Where a bookmark leads — a reading location without its book id (the
+ * bookmark's own `bookId` owns that, and follows book merges). */
+export type BookmarkTarget = {
+	contentVersion: string;
+	cfi?: string;
+	href?: string;
+	fraction?: number;
+	textQuote?: ReadingTextQuote;
+};
 declare const CONTEXT_BUNDLE_KINDS: readonly [
 	"user_profile_context",
 	"reading_intent_context",
@@ -1519,10 +1529,25 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 	 * absolute device path. Absent for single-file imports — additive field.
 	 */
 	sourcePath?: string;
+	/**
+	 * Whether the title/author still wait on the reading engine (every
+	 * PDF, RAR comics, containers the native extractor could not parse):
+	 * `book.metadataSettled` closes a `deferred` one. Absent on imports
+	 * that predate it — additive field.
+	 */
+	metadataStatus?: "deferred" | "settled";
 }> | DomainEventEnvelope<"book.metadataEdited", {
 	bookId: Id;
 	title?: string;
 	author?: string;
+}>
+/**
+ * The reading engine finished its metadata pass for a book imported with
+ * `metadataStatus: "deferred"`, whether or not it found anything to edit
+ * (a `book.metadataEdited` carries what it found). Host bookkeeping only.
+ */
+ | DomainEventEnvelope<"book.metadataSettled", {
+	bookId: Id;
 }> | DomainEventEnvelope<"book.coverExtracted", {
 	bookId: Id;
 	status: CoverStatus;
@@ -1769,6 +1794,21 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 	text: string;
 }> | DomainEventEnvelope<"ask.removed", {
 	askId: Id;
+}> | DomainEventEnvelope<"bookmark.created", {
+	bookmarkId: Id;
+	bookId: Id;
+	name: string;
+	kind: BookmarkKind;
+	target: BookmarkTarget;
+	/** The section it was made in; optional (the notes list groups by it). */
+	chapterHref?: string;
+}> | DomainEventEnvelope<"bookmark.renamed", {
+	bookmarkId: Id;
+	bookId: Id;
+	name: string;
+}> | DomainEventEnvelope<"bookmark.removed", {
+	bookmarkId: Id;
+	bookId: Id;
 }> | DomainEventEnvelope<"aiConversation.started", 
 /** `bookId` absent on global (Context page) threads — additive change. */
 {
@@ -2849,6 +2889,14 @@ export type BookLocationHit = {
 		match: string;
 		post: string;
 	};
+	/**
+	 * The whole text of the block the match is in, when that block is short (at
+	 * most 200 characters): a heading, a line of a contents page, a caption, a
+	 * line of dialogue. It tells a match that is a chapter's title from the same
+	 * words in a paragraph. Absent for a match in running text, and for content
+	 * without block structure (PDF text).
+	 */
+	blockText?: string;
 	location: ReadingLocation;
 	/** Exact text identity usable by library.readRange without moving the reader. */
 	range: BookTextRange;
