@@ -1,7 +1,7 @@
 /**
- * ReadAware plugin API — the public contract of ReadAware 0.6.10.
+ * ReadAware plugin API — the public contract of ReadAware 0.6.11.
  *
- * GENERATED from ahpxex/read-aware at v0.6.10 (319bae2f549f) by
+ * GENERATED from ahpxex/read-aware at v0.6.11 (bdbbdba18a22) by
  * scripts/sync-plugin-dts.ts. Do not edit: regenerate for each app release.
  * Capability versions for `manifest.requires` are in ./host-capabilities.json.
  *
@@ -207,7 +207,7 @@ export type WorkspaceTarget = {
 		bookIds: string[];
 	};
 } | {
-	surface: "agent" | "stats";
+	surface: "agent" | "stats" | "annotations";
 } | {
 	surface: "settings";
 	section?: WorkspaceSettingsSection;
@@ -229,7 +229,7 @@ export type WorkspaceSnapshot = {
 		bookId: string | null;
 		withheld: ("collectionId" | "search.query")[];
 	};
-	surface: "shelf" | "agent" | "stats" | "plugin" | "reader";
+	surface: "shelf" | "agent" | "stats" | "annotations" | "plugin" | "reader";
 	collectionId: string | null;
 	settings: {
 		open: boolean;
@@ -965,6 +965,14 @@ export interface BookSummary {
 	/** Original import file name/size; absent on virtual books. */
 	fileName?: string;
 	fileSize?: number;
+	/**
+	 * Whether the book's file is on this device; absent on virtual books. False
+	 * means the shelf entry came from another device and the bytes were never
+	 * fetched here: the book opens only if sync can still retrieve them.
+	 */
+	fileOnDevice?: boolean;
+	/** How many highlights, notes and questions the book carries. */
+	annotationCount?: number;
 	/** Folder-relative origin of a folder import (`Books/Sci-fi/Dune.epub`); absent otherwise. */
 	sourcePath?: string;
 	/**
@@ -1060,7 +1068,10 @@ export interface ChatMessageSummary {
 }
 export interface ThreadSummary {
 	id: Id;
+	/** The thread's generated title, or its first user message until it has one. */
 	title?: string;
+	/** The first user message, in the reader's own words (Conversations 1.7). */
+	preview?: string;
 	updatedAt?: IsoDate;
 }
 /** One chapter of a book's extracted text (content-layer read). */
@@ -1172,7 +1183,7 @@ declare const DOMAIN_CATALOG: {
 		];
 	};
 	readonly conversations: {
-		readonly version: "1.6.0";
+		readonly version: "1.7.0";
 		readonly pluginAccess: readonly [
 			"read",
 			"write"
@@ -1284,7 +1295,7 @@ declare const HOST_SERVICE_CATALOG: {
 		readonly permission: null;
 	};
 	readonly ui: {
-		readonly version: "1.17.0";
+		readonly version: "1.18.0";
 		readonly permission: null;
 	};
 	readonly schedules: {
@@ -1645,6 +1656,8 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 }> | DomainEventEnvelope<"collection.renamed", {
 	collectionId: Id;
 	name: string;
+}> | DomainEventEnvelope<"collection.opened", {
+	collectionId: Id;
 }> | DomainEventEnvelope<"collection.removed", {
 	collectionId: Id;
 }> | DomainEventEnvelope<"book.addedToCollection", {
@@ -1844,6 +1857,17 @@ export type DomainEvent = DomainEventEnvelope<"backup.restoreChunk", {
 	conversationId: Id;
 }> | DomainEventEnvelope<"aiConversation.cleared", {
 	conversationId: Id;
+}>
+/**
+ * A global thread's short title, written by the agent after its first
+ * exchange. It names the history beginning with `messageId` (the first user
+ * message): it lands only while that message is in the thread, and a clear
+ * resets it. Naming a thread is not activity.
+ */
+ | DomainEventEnvelope<"aiConversation.titled", {
+	conversationId: Id;
+	title: string;
+	messageId: Id;
 }> | DomainEventEnvelope<"context.bundlePublished", ContextBundle> | DomainEventEnvelope<"profile.onboarded", OnboardingChange> | DomainEventEnvelope<"profile.updated", {
 	displayName?: string | null;
 	summary?: string | null;
@@ -4665,7 +4689,9 @@ handler: (event: PluginDomainEvent<K>) => unknown, options?: {
 /** Book, source, metadata, and collection changes. */
 export type LibraryDomainEventType = "book.imported" | "book.metadataEdited" | "book.coverExtracted" | "book.merged" | "book.starred" | "book.removed" | "collection.created" | "collection.renamed" | "collection.removed" | "book.addedToCollection" | "book.removedFromCollection";
 export type AnnotationDomainEventType = "highlight.created" | "highlight.recolored" | "highlight.removed" | "note.created" | "note.updated" | "note.removed" | "ask.recorded" | "ask.removed";
-export type ConversationDomainEventType = "aiConversation.started" | "aiMessage.appended" | "aiMessage.removed" | "aiConversation.cleared";
+export type ConversationDomainEventType = "aiConversation.started" | "aiMessage.appended" | "aiMessage.removed" | "aiConversation.cleared"
+/** Conversations 1.7: a global thread was given its generated title. */
+ | "aiConversation.titled";
 export type PluginBook = BookSummary;
 export type PluginCollection = CollectionSummary;
 export type PluginHighlight = HighlightItem;
@@ -4953,7 +4979,7 @@ export type PluginAnnotationsDomain = {
 	};
 	events: {
 		subscribe: DomainSubscribe<AnnotationDomainEventType>;
-		/** Since 1.4. Initial authorized snapshot, then changed results/errors/recovery. Disposal ends polling. */
+		/** Since 1.4. Initial authorized snapshot, then changed results/errors/recovery. Disposal ends delivery. */
 		observe(query: AnnotationObservationQuery, handler: PluginObservationHandler<AnnotationObservation>): PluginDisposable;
 	};
 };
@@ -5128,7 +5154,7 @@ export type PluginDomains = {
 			retryGraphTask(bookId: string, taskId: string, options?: BookGraphTaskOptions): Promise<BookGraphTaskSnapshot>;
 		};
 		events: {
-			/** Initial snapshot, then changed results/errors; bounded polling, not an event log.
+			/** Initial snapshot, then changed results/errors; re-read when the store announces a change, not an event log.
 			 * Plugins 1.5 supplies a separate reaction delivery, including graph task updates. */
 			observe(query: MemoryObservationQuery, handler: PluginObservationHandler<MemoryObservation>): PluginDisposable;
 		};
@@ -5216,9 +5242,11 @@ export type PluginStorage = {
 	 * core domain events, files, or another plugin's documents. */
 	applyDocuments(changes: PluginDocumentChange[]): Promise<PluginDocumentCommit>;
 	/** Storage 2.2: initial and changed private document query snapshots, including
-	 * errors/recovery. At most 64 active observers per activation; reads and
-	 * callbacks settle before the next one-second poll. Not a replayable write
-	 * stream. Dispose or plugin retirement stops delivery; sequence is not CAS. */
+	 * errors/recovery. At most 64 active observers per activation. The query is
+	 * re-read when one of its documents is written (from any surface of this
+	 * plugin on this device, or another process such as the CLI), and one
+	 * callback settles before the next. Not a replayable write stream. Dispose or plugin retirement stops
+	 * delivery; sequence is not CAS. */
 	observeDocuments<T = unknown>(query: PluginDocumentObservationQuery, handler: PluginObservationHandler<PluginDocumentObservation<T>>): PluginDisposable;
 	/**
 	 * Fires when this plugin's namespace is written from OUTSIDE the plugin —
@@ -5670,7 +5698,8 @@ export type PluginHostServices = {
 			observe(query: WorkspaceQuery, handler: PluginObservationHandler<WorkspaceSnapshot | null>, options?: {
 				ruleId?: string;
 			}): PluginDisposable;
-			/** Library write grant; leaving an active reader additionally requires reading:write. */
+			/** Library write grant; leaving an active reader additionally requires reading:write.
+			 * UI 1.18: `{ surface: "annotations" }` opens the highlights & notes page, which snapshots report. */
 			navigate?(target: WorkspaceTarget, expectedRevision?: number): Promise<WorkspaceReceipt>;
 		};
 		showToast(message: PluginToast): void;
